@@ -26,8 +26,9 @@ jobs:
 
         - name: Install OpenCV
           run: |
-            sudo apt-get update
-            sudo apt-get install -y libopencv-dev
+            go get -u -d gocv.io/x/gocv
+            cd $GOPATH/src/gocv.io/x/gocv
+            make install
   
         - name: Download releaseMaker
           run: wget https://github.com/8ff/releaseMaker/releases/download/latest/releaseMaker.linux.amd64 -O /tmp/releaseMaker && chmod +x /tmp/releaseMaker

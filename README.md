@@ -110,7 +110,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
         "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
         "networkObjectDetectServer": "", // Address of the network object detection server.
         "prebufferSeconds": 10, // Number of seconds to prebuffer before the motion event.
-        "eventGap": 10 // Gap between events in seconds.
+        "eventGap": 30 // Gap between events in seconds.
     },
     "pixelMotionAreaThreshold": 50.00, // Minimum pixel motion area for an event to be triggered and passed to object detection.
     "objectCenterMovementThreshold": 50.0, // For stationary objects, minimum distance the center of an object should move for an event to be be considered new.
@@ -124,3 +124,14 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     "outputStreamAddr": "" // Address of the output stream. Eg: 0.0.0.0:8050
 }
 ```
+
+## Contribute Your Ideas
+
+Your input is highly valued! If you have ideas for new features, enhancements, or anything else you'd like to see in Firescrew, don't hesitate to let me know.
+You can contribute your ideas and suggestions by:
+
+- **Opening an Issue**: If you have a specific idea or request, you can open a new issue in the GitHub repository. Be sure to describe your idea in detail so that it can be fully understood and considered.
+
+- **Participating in Discussions**: Feel free to join existing discussions or start a new one in the discussion section of the repository. This is a great place to share your thoughts, engage with other users, and contribute to the ongoing development of Firescrew.
+
+Your insights and perspectives are vital in shaping the future of Firescrew. Together, we can make it even better!

@@ -120,15 +120,17 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
 ```
 
 ## Contribute Your Ideas
+Your input is highly valued! If you have ideas for new features, enhancements, or anything else you'd like to see in Firescrew you can contribute your ideas and suggestions by:
 
-Your input is highly valued! If you have ideas for new features, enhancements, or anything else you'd like to see in Firescrew, don't hesitate to let me know.
-You can contribute your ideas and suggestions by:
+- **Opening an Issue**: If you have a specific idea or request, please consider first using the discussion section as detailed below. For bugs or clearly defined enhancements, you can open a new issue in the GitHub repository. Be sure to describe your idea in detail so that it can be fully understood and considered.
 
-- **Opening an Issue**: If you have a specific idea or request, you can open a new issue in the GitHub repository. Be sure to describe your idea in detail so that it can be fully understood and considered.
+- **Participating in Discussions**: Feel free to join existing discussions or start a new one in the discussion section of the repository. **This is the preferred place for sharing wishlists and brainstorming ideas.** By sharing your thoughts here, you can engage with other users, contribute to the ongoing development of Firescrew, and see your ideas evolve into implementable features.
 
-- **Participating in Discussions**: Feel free to join existing discussions or start a new one in the discussion section of the repository. This is a great place to share your thoughts, engage with other users, and contribute to the ongoing development of Firescrew.
+Your insights and perspectives are vital in shaping the future of Firescrew. Together, we can make it even better! Discussions serve as a dynamic space for collaboration and creativity, and ideas from this section may well be selected for future implementation. Let's work together to continue to innovate and improve Firescrew.
 
-Your insights and perspectives are vital in shaping the future of Firescrew. Together, we can make it even better!
+**Stay Updated**: For the latest updates and news, please consider following [8ffChief on Twitter](http://twitter.com/8ffChief). Stay connected and be the first to know about new features, releases, and more!
+
+
 
 ## TODO
 - **GetDimensions Web UI

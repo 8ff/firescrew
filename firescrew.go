@@ -37,6 +37,8 @@ import (
 	"gocv.io/x/gocv"
 )
 
+var Version string
+
 //go:embed assets/*
 var assetsFs embed.FS
 
@@ -535,6 +537,10 @@ func main() {
 			return
 		}
 		firescrewServe.Serve(os.Args[2], os.Args[3])
+	case "-v", "--version", "v":
+		// Print version
+		fmt.Println(Version)
+		os.Exit(0)
 	}
 
 	// Read the config file

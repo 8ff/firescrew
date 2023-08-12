@@ -1,0 +1,150 @@
+body {
+    background: #292727;
+    font-family: Arial, sans-serif;
+}
+
+#promptInput {
+    display: block;
+    width: 50%;
+    max-width: 600px; /* This will ensure the input field does not become too large on wide screens */
+    margin: 0 auto; /* Centers the input field */
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 4px;
+    border: 2px solid #444;
+    background-color: #222;
+    color: #eee;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+#promptInput:focus {
+    border-color: #448aff;
+}
+
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    box-sizing: border-box;
+    /* max-width: 960px; */
+    margin: 0 auto;
+}
+
+.image-grid img {
+    width: 100%;
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.image-grid img:hover {
+    transform: scale(1.05);
+    box-shadow: 0px 2px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* The Modal (background) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    padding-top: 50px; /* Location of the box */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Modal Content */
+.modal-content {
+    background-color: #292727;
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    text-align: center;
+    border-radius: 5px;
+}
+
+/* The Close Button */
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Video Player */
+#videoPlayer {
+    max-width: 100%;
+    max-height: 80vh;
+}
+
+#eventInfo {
+    margin-bottom: 10px;
+}
+
+.infoLabel {
+    border: 1px solid rgb(221, 126, 17);
+    border-radius: 10px;
+    padding: 5px;
+    background-color: rgba(221, 126, 17, 0.253);
+    margin: 5px;
+    color: rgb(222, 212, 212);
+}
+
+.infoLabelTime {
+    border: 1px solid rgb(221, 211, 17);
+    background-color: rgba(221, 211, 17, 0.253);
+}
+
+.infoLabelCameraName {
+    border: 1px solid rgb(221, 17, 116);
+    background-color: rgba(221, 17, 116, 0.253);
+}
+
+.infoLabelEventID {
+    border: 1px solid rgb(17, 187, 221);
+    background-color: rgba(17, 187, 221, 0.253);
+}
+
+
+/* Card background Hue */
+#imageGrid img {
+    padding: 5px;
+    border-radius: 5px;
+    position: relative;
+    box-shadow: 0 0 15px 5px currentColor;
+}
+
+
+.image-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.icons {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+}
+
+.objectIcon {
+    color: rgba(255, 87, 0, 0.8);
+    margin-top: 5px;
+}

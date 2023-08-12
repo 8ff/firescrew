@@ -1,0 +1,33 @@
+{
+    "cameraName": "front",
+    "deviceUrl": "",
+    "hiResDeviceUrl": "",
+    "useEmbeddedSSDMobileNetV1Model": false,
+    "modelFile": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17/frozen_inference_graph.pb",
+    "modelConfig": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17.pbtxt",
+    "printDebug": false,
+    "video": {
+        "hiResPath": "rec/hi",
+        "loResPath": "rec/lo",
+        "recodeTsToMp4": true
+    },
+    "motion": {
+        "objectMinThreshold": 0.3,
+        "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
+        "embeddedObjectDetector": false,
+        "networkObjectDetectServer": "",
+        "prebufferSeconds": 10,
+        "eventGap": 30
+    },
+    "pixelMotionAreaThreshold": 50.00,
+    "objectCenterMovementThreshold": 50.0,
+    "objectAreaThreshold": 2000.0,
+    "ignoreAreasClasses": [
+        {"class": ["template"], "coordinates": "0,0,0,0"},
+        {"class": ["car", "truck", "train", "suitcase"], "coordinates": "133,356,114,397"},
+        {"class": ["car", "truck", "train", "suitcase"], "coordinates": "93,274,290,547"}
+    ],
+    "streamDrawIgnoredAreas": true,
+    "enableOutputStream": true,
+    "outputStreamAddr": ":8040"
+}

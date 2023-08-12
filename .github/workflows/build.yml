@@ -24,10 +24,27 @@ jobs:
         - name: Install dependencies
           run: go mod download
 
+        - name: Install OpenCV dependencies
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y cmake g++ wget unzip
+            sudo apt-get install -y libgtk-3-dev
+            sudo apt-get install -y libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
+            sudo apt-get install -y libxvidcore-dev libx264-dev
+    
         - name: Install OpenCV
           run: |
+            wget -O opencv.zip https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip
+            unzip opencv.zip
+            mkdir -p build && cd build
+            cmake ../opencv-4.5.2
+            make -j$(nproc)
+            sudo make install
+    
+        - name: Install GoCV
+          run: |
             go get -u -d gocv.io/x/gocv
-            cd $GOPATH/src/gocv.io/x/gocv
+            cd $(go env GOPATH)/pkg/mod/gocv.io/x/gocv@latest
             make install
   
         - name: Download releaseMaker

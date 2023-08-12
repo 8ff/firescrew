@@ -60,12 +60,6 @@ This will start a demo stream at `rtsp://localhost:8553/lo` and `rtsp://localhos
 cd demoStream && ./startDemoStream.sh
 ```
 
-## TODO
-- **GetDimensions Web UI
-- **Finish notifications via slack/email?
-- **Event via external script
-- **Add uploading footage to cloud
-
 ## Dependencies Installation for YOLOv8
 If you choose to use the YOLOv8 model via the Python adapter for faster and more accurate detection, you will need to install the Ultralytics dependencies.
 You can do this by running the following command:
@@ -135,3 +129,9 @@ You can contribute your ideas and suggestions by:
 - **Participating in Discussions**: Feel free to join existing discussions or start a new one in the discussion section of the repository. This is a great place to share your thoughts, engage with other users, and contribute to the ongoing development of Firescrew.
 
 Your insights and perspectives are vital in shaping the future of Firescrew. Together, we can make it even better!
+
+## TODO
+- **GetDimensions Web UI
+- **Finish notifications via slack/email?
+- **Event via external script
+- **Add uploading footage to cloud

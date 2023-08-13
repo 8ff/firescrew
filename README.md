@@ -178,6 +178,7 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 
 
 ## TODO
+- Get rid go GoCV
 - Dockerfile
 - GetDimensions Web UI
 - Finish notifications via slack/email?
@@ -187,3 +188,4 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 - MQTT Events
 - HA Integration
 - Yaml Config ?
+- Experiment with cropped motion detection ?

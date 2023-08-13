@@ -178,12 +178,12 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 
 
 ## TODO
-- **GetDimensions Web UI
-- **Finish notifications via slack/email?
-- **Event via external script
-- **Add uploading footage to cloud
-- **Dockerfile
-- **HA Integration
-- **MQTT Events
-- **Coral TPU Adapter
-- **Yaml Config ?
+- Dockerfile
+- GetDimensions Web UI
+- Finish notifications via slack/email?
+- Add benchmarks
+- Event via external script
+- Add uploading footage to cloud
+- MQTT Events
+- HA Integration
+- Yaml Config ?

@@ -12,6 +12,11 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
 
 ## Installation
+### Docker
+docker run -v config.json:config.json 8ffOrg/firescrew:latest
+
+
+### Manual
 Firescrew leverages the capabilities of `ffmpeg` to ensure optimal performance and broad compatibility, you will need to install them before use.
 
 
@@ -111,7 +116,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
         "objectMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
         "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
-        "embeddedObjectScript": "objectDetectServerYolo.py", // This defined which script will be used for object detection. Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
+        "embeddedObjectScript": "objectDetectServerYolo.py", // Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
 
         "networkObjectDetectServer": "", // Address of the network object detection server.
         "prebufferSeconds": 10, // Number of seconds to prebuffer before the motion event.
@@ -129,6 +134,28 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     "outputStreamAddr": "" // Address of the output stream. Eg: 0.0.0.0:8050
 }
 ```
+
+## Performance
+Firescrew's performance has been meticulously examined and optimized to ensure the fastest and most reliable object detection. The key aspects of this examination include comparing different RTSP feed methods and evaluating various model object detections. Here are the details:
+
+### RTSP Feed Comparison
+Three different methods for parsing RTSP feeds were tested:
+- **GoCV RTSP Feed**: Utilized the GoCV library to handle RTSP feeds.
+- **GoRTSP Feed**: Utilized the GoRTSP library for RTSP feed handling.
+- **FFmpeg Command**: Employed FFmpeg commands to parse RTSP feeds.
+
+Among these, using the FFmpeg command was found to be the fastest and most compatible between RTSP feeds. This approach not only delivered superior speed but also ensured broad compatibility across different types of RTSP feeds.
+
+### Model Object Detection Comparison
+Two primary models were examined for object detection:
+- **Golang MobileNET**: This built-in Go model was tested for object detection capabilities.
+- **YOLOv8**: The YOLOv8 model was examined via a Python adapter for faster and more accurate detection.
+
+The comparison clearly revealed that YOLOv8 outperformed the Golang MobileNET in both speed and quality. The detection was faster, and the quality of object identification was much better with YOLOv8.
+
+### Conclusion
+Based on these comprehensive performance tests, Firescrew has adopted the use of the FFmpeg command for RTSP feed handling and the YOLOv8 model for object detection. This decision ensures the delivery of a fast, accurate, and high-quality solution for real-time object and motion detection. Additionally, the implementation of a network model adapter allows the support of any desired model detection, providing flexibility and adaptability for various use cases.
+
 
 ## Contribute Your Ideas
 Your input is highly valued! If you have ideas for new features, enhancements, or anything else you'd like to see in Firescrew you can contribute your ideas and suggestions by:

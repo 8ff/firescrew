@@ -7,7 +7,7 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 ## Key Features
 - **Real-Time Motion Detection**: Firescrew can detect motion from a live feed and provide real-time alerts.
 - **Object Identification**: Identify specific objects like cars and people in real-time.
-- **Model Flexibility**: Firescrew can use the built-in Go model SSD Mobilenet V1, or it can use the latest YOLOv8 model via a Python adapter for faster and more accurate detection.
+- **Model Flexibility**: Firescrew can use the built-in Go model SSD Mobilenet V1, or it can use the latest YOLOv8 model via a Python adapter for faster and more accurate detection. Additionally, it now supports EdgeTPU models, allowing for the use of Coral TPU for enhanced performance.
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
 
@@ -103,7 +103,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
         "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
         "embeddedObjectScript": "objectDetectServerYolo.py", // This defined which script will be used for object detection. Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
-        
+
         "networkObjectDetectServer": "", // Address of the network object detection server.
         "prebufferSeconds": 10, // Number of seconds to prebuffer before the motion event.
         "eventGap": 30 // Gap between events in seconds.

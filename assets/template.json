@@ -15,6 +15,7 @@
         "objectMinThreshold": 0.3,
         "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
         "embeddedObjectDetector": false,
+        "embeddedObjectScript": "objectDetectServerYolo.py",
         "networkObjectDetectServer": "",
         "prebufferSeconds": 10,
         "eventGap": 30

@@ -102,6 +102,8 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
         "objectMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
         "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
+        "embeddedObjectScript": "objectDetectServerYolo.py", // This defined which script will be used for object detection. Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
+        
         "networkObjectDetectServer": "", // Address of the network object detection server.
         "prebufferSeconds": 10, // Number of seconds to prebuffer before the motion event.
         "eventGap": 30 // Gap between events in seconds.

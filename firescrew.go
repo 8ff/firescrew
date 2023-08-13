@@ -78,6 +78,7 @@ type Config struct {
 	OutputStreamAddr               string            `json:"outputStreamAddr"`
 	Motion                         struct {
 		EmbeddedObjectDetector    bool     `json:"EmbeddedObjectDetector"`
+		EmbeddedObjectScript      string   `json:"EmbeddedObjectScript"`
 		ObjectMinThreshold        float64  `json:"objectMinThreshold"`
 		LookForClasses            []string `json:"lookForClasses"`
 		NetworkObjectDetectServer string   `json:"networkObjectDetectServer"`
@@ -599,7 +600,7 @@ func main() {
 		// Copy assets to local filesystem
 		path := copyAssetsToTemp()
 		// Start the object detector
-		go startObjectDetector(path + "/objectDetectServer.py")
+		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 
 		// Set networkObjectDetectServer path to 127.0.0.1:8555
 		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
@@ -1285,62 +1286,6 @@ func yoloPredict(imgRaw image.Image) ([]Prediction, error) {
 		return nil, errors.New("operation timed out")
 	}
 }
-
-// func startObjectDetector(scriptPath string) {
-// 	basePath := filepath.Dir(scriptPath)
-// 	restartCount := 0
-
-// 	for {
-// 		if restartCount > 3 {
-// 			Log("error", "Embedded python script failed 3 times, giving up")
-// 			os.Exit(1)
-// 		}
-
-// 		cmd := exec.Command("python3", scriptPath)
-// 		cmd.Dir = basePath
-
-// 		stdout, err := cmd.StdoutPipe()
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Error creating StdoutPipe for Cmd: %v", err))
-// 			continue
-// 		}
-
-// 		var stderr bytes.Buffer
-// 		cmd.Stderr = &stderr
-
-// 		Log("info", "Starting embedded python object server")
-// 		err = cmd.Start()
-
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Error starting Cmd: %v", err))
-// 			continue
-// 		}
-
-// 		go readOutput(stdout)
-
-// 		// Create a channel to catch signals to the process
-// 		c := make(chan os.Signal, 1)
-// 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-// 		go func() {
-// 			<-c
-// 			if cmd.Process != nil {
-// 				cmd.Process.Kill()
-// 			}
-// 			os.Exit(1)
-// 		}()
-
-// 		err = cmd.Wait()
-
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Embedded python script failed: %s", stderr.String()))
-// 		} else {
-// 			Log("info", "Embedded python script exited, restarting...")
-// 		}
-
-// 		time.Sleep(2 * time.Second)
-// 		restartCount++
-// 	}
-// }
 
 func startObjectDetector(scriptPath string) {
 	basePath := filepath.Dir(scriptPath)

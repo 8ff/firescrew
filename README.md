@@ -12,12 +12,19 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
 
 ## Installation
-### Docker
+### Docker * WORK IN PROGRESS *
+```bash
 docker run -v config.json:config.json 8ffOrg/firescrew:latest
+```
 
 
-### Manual
+### Local
 Firescrew leverages the capabilities of `ffmpeg` to ensure optimal performance and broad compatibility, you will need to install them before use.
+```bash
+apt-get install ffmpeg
+pip3 install ultralytics
+curl -O firescrew -L https://github.com/8ff/firescrew/releases/download/latest/firescrew.linux.amd64 && chmod +x firescrew
+```
 
 
 ## Usage

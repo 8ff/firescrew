@@ -718,9 +718,9 @@ func main() {
 								return
 							}
 
-							for _, inst := range predict {
-								Log("warning", fmt.Sprintf("InferenceTook: %fms", inst.Took))
-							}
+							// for _, inst := range predict {
+							// 	Log("warning", fmt.Sprintf("InferenceTook: %fms", inst.Took))
+							// }
 
 							performDetectionOnObject(rgba, predict)
 						}

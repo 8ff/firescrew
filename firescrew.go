@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"io"
 	"log"
@@ -31,22 +32,18 @@ import (
 	"time"
 
 	"github.com/8ff/firescrew/pkg/firescrewServe"
+	"github.com/goki/freetype"
+	"github.com/goki/freetype/truetype"
 	"golang.org/x/image/bmp"
+	"golang.org/x/image/math/fixed"
 
 	"github.com/hybridgroup/mjpeg"
-	"gocv.io/x/gocv"
 )
 
 var Version string
 
 //go:embed assets/*
 var assetsFs embed.FS
-
-//go:embed models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17.pbtxt
-var embeddedModelConfig []byte
-
-//go:embed models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17/frozen_inference_graph.pb
-var embeddedModelFile []byte
 
 var stream *mjpeg.Stream
 
@@ -59,27 +56,25 @@ type Prediction struct {
 	Left       int       `json:"left"`
 	Right      int       `json:"right"`
 	Confidence float32   `json:"confidence"`
+	Took       float64   `json:"took"`
 }
 
 type Config struct {
-	CameraName                     string            `json:"cameraName"`
-	PrintDebug                     bool              `json:"printDebug"`
-	UseEmbeddedSSDMobileNetV1Model bool              `json:"useEmbeddedSSDMobileNetV1Model"`
-	DeviceUrl                      string            `json:"deviceUrl"`
-	HiResDeviceUrl                 string            `json:"hiResDeviceUrl"`
-	ModelFile                      string            `json:"modelFile"`
-	ModelConfig                    string            `json:"modelConfig"`
-	PixelMotionAreaThreshold       float64           `json:"pixelMotionAreaThreshold"`
-	ObjectCenterMovementThreshold  float64           `json:"objectCenterMovementThreshold"`
-	ObjectAreaThreshold            float64           `json:"objectAreaThreshold"`
-	StreamDrawIgnoredAreas         bool              `json:"streamDrawIgnoredAreas"`
-	IgnoreAreasClasses             []IgnoreAreaClass `json:"ignoreAreasClasses"`
-	EnableOutputStream             bool              `json:"enableOutputStream"`
-	OutputStreamAddr               string            `json:"outputStreamAddr"`
-	Motion                         struct {
+	CameraName                    string            `json:"cameraName"`
+	PrintDebug                    bool              `json:"printDebug"`
+	DeviceUrl                     string            `json:"deviceUrl"`
+	HiResDeviceUrl                string            `json:"hiResDeviceUrl"`
+	PixelMotionAreaThreshold      float64           `json:"pixelMotionAreaThreshold"`
+	ObjectCenterMovementThreshold float64           `json:"objectCenterMovementThreshold"`
+	ObjectAreaThreshold           float64           `json:"objectAreaThreshold"`
+	StreamDrawIgnoredAreas        bool              `json:"streamDrawIgnoredAreas"`
+	IgnoreAreasClasses            []IgnoreAreaClass `json:"ignoreAreasClasses"`
+	EnableOutputStream            bool              `json:"enableOutputStream"`
+	OutputStreamAddr              string            `json:"outputStreamAddr"`
+	Motion                        struct {
 		EmbeddedObjectDetector    bool     `json:"EmbeddedObjectDetector"`
 		EmbeddedObjectScript      string   `json:"EmbeddedObjectScript"`
-		ObjectMinThreshold        float64  `json:"objectMinThreshold"`
+		ConfidenceMinThreshold    float64  `json:"confidenceMinThreshold"`
 		LookForClasses            []string `json:"lookForClasses"`
 		NetworkObjectDetectServer string   `json:"networkObjectDetectServer"`
 		EventGap                  int      `json:"eventGap"`
@@ -101,6 +96,7 @@ type Runtime struct {
 	HiResControlChannel chan RecordMsg
 	MotionVideo         VideoMetadata
 	MotionMutex         *sync.Mutex
+	TextFont            *truetype.Font
 }
 
 type IgnoreAreaClass struct {
@@ -194,19 +190,30 @@ func readConfig(path string) Config {
 		}
 	}
 
+	if config.Motion.EmbeddedObjectDetector {
+		if config.Motion.EmbeddedObjectScript == "" {
+			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be set")))
+			os.Exit(1)
+		}
+
+		if config.Motion.EmbeddedObjectScript != "objectDetectServerYolo.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoral.py" {
+			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be either objectDetectServerYolo.py or objectDetectServerCoral.py")))
+			os.Exit(1)
+		}
+
+	}
+
 	// Print the configuration properties.
 	Log("info", "******************** CONFIG ********************")
 	Log("info", fmt.Sprintf("Print Debug: %t", config.PrintDebug))
-	Log("info", fmt.Sprintf("Use Embedded SSD MobileNetV1 Model: %t", config.UseEmbeddedSSDMobileNetV1Model))
 	Log("info", fmt.Sprintf("Device URL: %s", config.DeviceUrl))
 	Log("info", fmt.Sprintf("Hi-Res Device URL: %s", config.HiResDeviceUrl))
-	Log("info", fmt.Sprintf("Model File: %s", config.ModelFile))
-	Log("info", fmt.Sprintf("Model Config: %s", config.ModelConfig))
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video LoResPath: %s", config.Video.LoResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
 	Log("info", fmt.Sprintf("Motion Embedded Object Detector: %t", config.Motion.EmbeddedObjectDetector))
-	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ObjectMinThreshold))
+	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
+	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ConfidenceMinThreshold))
 	Log("info", fmt.Sprintf("Motion LookForClasses: %v", config.Motion.LookForClasses))
 	Log("info", fmt.Sprintf("Motion Network Object Detect Server: %s", config.Motion.NetworkObjectDetectServer))
 	Log("info", fmt.Sprintf("Motion PrebufferSeconds: %d", config.Motion.PrebufferSeconds))
@@ -222,6 +229,21 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Enable Output Stream: %t", config.EnableOutputStream))
 	Log("info", fmt.Sprintf("Output Stream Address: %s", config.OutputStreamAddr))
 	Log("info", "************************************************")
+
+	// Load font into runtime
+	fontBytes, err := assetsFs.ReadFile("assets/fonts/Changes.ttf")
+	if err != nil {
+		Log("error", fmt.Sprintf("Error reading font file: %v", err))
+		os.Exit(1)
+	}
+
+	font, err := freetype.ParseFont(fontBytes)
+	if err != nil {
+		Log("error", fmt.Sprintf("Error parsing font file: %v", err))
+		os.Exit(1)
+	}
+
+	runtime.TextFont = font
 
 	return config
 }
@@ -503,10 +525,6 @@ func recodeToMP4(inputFile string) (string, error) {
 
 func main() {
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	// Check if there is a config file argument, if there isnt give error and exit
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Not enough arguments provided\n")
@@ -582,16 +600,6 @@ func main() {
 	Log("info", fmt.Sprintf("Lo-Res Stream Resolution: %dx%d FPS: %d", loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height, loResStreamInfo.Streams[0].RFrameRate))
 	Log("info", "*****************************************************")
 
-	// If the user wants to use the embedded model, write the model to a file
-	if globalConfig.UseEmbeddedSSDMobileNetV1Model {
-		// Write the model config to a file
-		err := storeModelFiles()
-		if err != nil {
-			Log("error", fmt.Sprintf("Error writing model files: %v", err))
-			return
-		}
-	}
-
 	// Define motion mutex
 	runtime.MotionMutex = &sync.Mutex{}
 
@@ -608,51 +616,13 @@ func main() {
 		time.Sleep(5 * time.Second)
 	}
 
-	backend := gocv.NetBackendDefault
-	backend = gocv.ParseNetBackend(globalConfig.ModelFile)
-
 	stream = mjpeg.NewStream()
 	if globalConfig.EnableOutputStream {
 		go startWebcamStream(stream)
 	}
 
-	// Prepare motion
-	img := gocv.NewMat()
-	defer img.Close()
-
-	// open DNN object tracking model
-	net := gocv.ReadNet(globalConfig.ModelFile, globalConfig.ModelConfig)
-	if net.Empty() {
-		fmt.Printf("Error reading network model from : %v %v\n", globalConfig.ModelFile, globalConfig.ModelConfig)
-		return
-	}
-	defer net.Close()
-	net.SetPreferableBackend(gocv.NetBackendType(backend))
-	net.SetPreferableTarget(gocv.NetTargetType(gocv.ParseNetTarget(globalConfig.ModelConfig)))
-
-	var ratio float64
-	var mean gocv.Scalar
-	var swapRGB bool
-
-	if filepath.Ext(globalConfig.ModelFile) == ".caffemodel" {
-		ratio = 1.0
-		mean = gocv.NewScalar(104, 177, 123, 0)
-		swapRGB = false
-	} else {
-		ratio = 1.0 / 127.5
-		mean = gocv.NewScalar(127.5, 127.5, 127.5, 0)
-		swapRGB = true
-	}
-
-	// Prepare motion detection
-	imgDelta := gocv.NewMat()
-	defer imgDelta.Close()
-
-	imgThresh := gocv.NewMat()
-	defer imgThresh.Close()
-
-	mog2 := gocv.NewBackgroundSubtractorMOG2()
-	defer mog2.Close()
+	// Define the last image
+	imgLast := image.NewRGBA(image.Rect(0, 0, loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height))
 
 	// Start HI Res prebuffering
 	runtime.HiResControlChannel = make(chan RecordMsg)
@@ -681,25 +651,18 @@ func main() {
 		}
 
 		if msg.Frame != nil {
-			img, err := gocv.ImageToMatRGB(msg.Frame)
-			if err != nil {
-				Log("error", fmt.Sprintf("Conversion Error: %s", err))
-				continue
+			rgba, ok := msg.Frame.(*image.RGBA)
+			if !ok {
+				// Convert to RGBA if it's not already
+				rgba = image.NewRGBA(msg.Frame.Bounds())
+				draw.Draw(rgba, rgba.Bounds(), msg.Frame, msg.Frame.Bounds().Min, draw.Src)
 			}
-
-			if img.Empty() {
-				continue
-			}
-
-			buf, _ := gocv.IMEncode(".jpg", img)
-			stream.UpdateJPEG(buf.GetBytes())
-			buf.Close()
 
 			// Handle all motion stuff here
-			if isMotion(img, mog2, imgDelta, imgThresh, 25, globalConfig.PixelMotionAreaThreshold) {
+			if runtime.MotionTriggered || (!runtime.MotionTriggered && CountChangedPixels(rgba, imgLast, uint8(30)) > int(globalConfig.ObjectAreaThreshold)) { // Use short-circuit to bypass pixel count if event is already triggered, otherwise we may not be able to identify all objects if motion is triggered
 				// If its been more than globalConfig.Motion.EventGap seconds since the last motion event, untrigger
 				if runtime.MotionTriggered && time.Since(runtime.MotionTriggeredLast) > time.Duration(globalConfig.Motion.EventGap)*time.Second {
-					Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtime.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
+					// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtime.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
 					Log("info", "MOTION_ENDED")
 					runtime.MotionMutex.Lock()
 					// Stop Hi res recording and dump json file as well as clear struct
@@ -748,218 +711,41 @@ func main() {
 						}
 						// Only run this on every 5th frame
 						if msg.Frame != nil {
-							// Send data to yoloPredict
-							predict, err := yoloPredict(msg.Frame)
+							// Send data to objectPredict
+							predict, err := objectPredict(msg.Frame)
 							if err != nil {
-								Log("error", fmt.Sprintf("Error running yoloPredict: %v", err))
+								Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
 								return
 							}
 
-							// fmt.Printf("predict: %v\n", predict)
-							performDetectionOnObject(&img, predict) // Perform the detection
+							for _, inst := range predict {
+								Log("warning", fmt.Sprintf("InferenceTook: %fms", inst.Took))
+							}
+
+							performDetectionOnObject(rgba, predict)
 						}
 					}
 					predictFrameCounter++
-				} else {
-
-					///////// LOCAL OBJECT DETECT /////////
-					// convert image Mat to 300x300 blob that the object detector can analyze
-					// blob := gocv.BlobFromImage(img, ratio, image.Pt(img.Cols(), img.Rows()), mean, swapRGB, false)
-					blob := gocv.BlobFromImage(img, ratio, image.Pt(300, 300), mean, swapRGB, false)
-
-					// feed the blob into the detector
-					net.SetInput(blob, "")
-
-					// run a forward pass thru the network
-					prob := net.Forward("")
-					performDetection(&img, prob) // Perform the detection
-					prob.Close()
-					blob.Close()
-
-					// Copy &img to gocv.Mat to keep the object detection rectangle
-					qimg := gocv.NewMat()
-					img.CopyTo(&qimg)
-					// defer qimg.Close()
-					///////////// END LOCAL OBJECT DETECT /////////////
 				}
 
-				// writer.Write(qimg) // Write the frame to file
-
 				if globalConfig.EnableOutputStream {
-					streamImage(&img, stream) // Stream the image to the web
+					streamImage(rgba, stream) // Stream the image to the web
 				}
 			} else {
 				if globalConfig.EnableOutputStream {
-					streamImage(&img, stream) // Stream the image to the web
+					streamImage(rgba, stream) // Stream the image to the web
 				}
 			}
 
+			imgLast = rgba
 			// Cleanup
-			img.Close()
+			// img.Close()
 		}
 	}
 
-	// Start HI Res recording
-	// go func() {
-	// 	_, err = streamHandleHi.Client.Play(nil)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	// wait until a fatal error
-	// 	panic(streamHandleHi.Client.Wait())
-	// }()
-
-	// start playing
-	// _, err = streamHandleLo.Client.Play(nil)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// wait until a fatal error
-	// panic(streamHandleLo.Client.Wait())
 }
 
-func isMotion(img gocv.Mat, mog2 gocv.BackgroundSubtractorMOG2, imgDelta gocv.Mat, imgThresh gocv.Mat, fps float64, MinimumArea float64) bool {
-	// Motion detection
-	// first phase of cleaning up image, obtain foreground only
-	mog2.Apply(img, &imgDelta)
-
-	// remaining cleanup of the image to use for finding contours.
-	// first use threshold
-	gocv.Threshold(imgDelta, &imgThresh, float32(fps), 255, gocv.ThresholdBinary)
-
-	// then dilate
-	kernel := gocv.GetStructuringElement(gocv.MorphRect, image.Pt(3, 3))
-	gocv.Dilate(imgThresh, &imgThresh, kernel)
-	kernel.Close()
-
-	// now find contours
-	contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
-
-	defer contours.Close()
-
-	for i := 0; i < contours.Size(); i++ {
-		area := gocv.ContourArea(contours.At(i))
-		if area < MinimumArea {
-			continue
-		} else {
-			return true
-		}
-	}
-
-	return false
-}
-
-// performDetection analyzes the results from the detector network,
-// which produces an output blob with a shape 1x1xNx7
-// where N is the number of detections, and each detection
-// is a vector of float values
-// [batchId, classId, confidence, left, top, right, bottom]
-func performDetection(frame *gocv.Mat, results gocv.Mat) {
-	now := time.Now()
-
-	for i := 0; i < results.Total(); i += 7 {
-		confidence := results.GetFloatAt(0, i+2)
-		classId := int(results.GetFloatAt(0, i+1))
-		if confidence > float32(globalConfig.Motion.ObjectMinThreshold) {
-			// fmt.Printf("classID: %s, confidence: %v\n", getClass(int(classId)), confidence)
-			left := int(results.GetFloatAt(0, i+3) * float32(frame.Cols()))
-			top := int(results.GetFloatAt(0, i+4) * float32(frame.Rows()))
-			right := int(results.GetFloatAt(0, i+5) * float32(frame.Cols()))
-			bottom := int(results.GetFloatAt(0, i+6) * float32(frame.Rows()))
-
-			rect := image.Rect(left, top, right, bottom)
-
-			object := TrackedObject{
-				BBox:       rect,
-				Center:     image.Pt((left+right)/2, (top+bottom)/2),
-				LastMoved:  now,
-				Area:       float64(rect.Dx() * rect.Dy()),
-				Class:      getClass(int(classId)),
-				Confidence: confidence,
-			}
-
-			// If object is not within LookForClasses, skip it
-			if len(globalConfig.Motion.LookForClasses) > 0 {
-				found := false
-				for _, filterClass := range globalConfig.Motion.LookForClasses {
-					if object.Class == filterClass {
-						found = true
-					}
-				}
-				if !found {
-					continue
-				}
-			}
-
-			exists := findObjectPosition(object)
-			if !exists {
-
-				// Check if this object is within the areas of interest
-				for _, ignoreAreaClass := range globalConfig.IgnoreAreasClasses {
-					for _, class := range ignoreAreaClass.Class {
-						if class == object.Class {
-							if object.Center.X > ignoreAreaClass.Left && object.Center.X < ignoreAreaClass.Right && object.Center.Y > ignoreAreaClass.Top && object.Center.Y < ignoreAreaClass.Bottom {
-								// This object is within an ignore area, skip it
-								// fmt.Printf("Ignoring object %s @ %d|%f\n", object, object.Center)
-								// Log("warning", fmt.Sprintf("IGNORING OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
-								return
-							}
-						}
-					}
-				}
-
-				Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
-				if !runtime.MotionTriggered { // If this is NEW motion
-					// Lock mutex
-					runtime.MotionMutex.Lock()
-					runtime.MotionTriggered = true
-					runtime.MotionTriggeredLast = now
-					runtime.MotionVideo.CameraName = globalConfig.CameraName
-					runtime.MotionVideo.MotionStart = now
-					// Generate random string filename for runtime.MotionVideo.Filename
-					runtime.MotionVideo.ID = generateRandomString(15) + ".ts"
-					runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
-					runtime.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtime.MotionVideo.ID)                                                            // Set filename for video file
-					runtime.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile)} // Start recording
-
-					// Unlock mutex
-					runtime.MotionMutex.Unlock()
-				} else { // If this is EXISTING motion
-					// Lock mutex
-					runtime.MotionMutex.Lock()
-					runtime.MotionTriggeredLast = now
-					runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
-					// Unlock mutex
-					runtime.MotionMutex.Unlock()
-				}
-
-				Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
-
-				gocv.Rectangle(frame, rect, color.RGBA{0, 255, 0, 0}, 2)
-
-				// Adding the label
-				pt := image.Pt(left, top-5)
-				if top-5 < 0 {
-					pt = image.Pt(left, top+20) // if the box is too close to the top of the image, put the label inside the box
-				}
-				gocv.PutText(frame, fmt.Sprintf("%s %.2f", getClass(int(classId)), confidence), pt, gocv.FontHersheyPlain, 2.2, color.RGBA{0, 255, 0, 0}, 2)
-
-				// Store snapshot of the object
-				if runtime.MotionVideo.ID != "" {
-					snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtime.MotionVideo.ID, generateRandomString(4))
-					runtime.MotionVideo.Snapshots = append(runtime.MotionVideo.Snapshots, snapshotFilename)
-					gocv.IMWrite(fmt.Sprintf("%s/%s", globalConfig.Video.HiResPath, snapshotFilename), *frame)
-				} else {
-					Log("warning", "runtime.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
-				}
-			}
-		}
-	}
-}
-
-func performDetectionOnObject(frame *gocv.Mat, prediction []Prediction) {
+func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 	now := time.Now()
 
 	for _, predict := range prediction {
@@ -976,7 +762,7 @@ func performDetectionOnObject(frame *gocv.Mat, prediction []Prediction) {
 			}
 		}
 
-		if predict.Confidence < float32(globalConfig.Motion.ObjectMinThreshold) {
+		if predict.Confidence < float32(globalConfig.Motion.ConfidenceMinThreshold) {
 			continue
 		}
 
@@ -1035,27 +821,123 @@ func performDetectionOnObject(frame *gocv.Mat, prediction []Prediction) {
 
 			Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
 
-			gocv.Rectangle(frame, rect, color.RGBA{0, 255, 0, 0}, 2)
+			drawRectangle(frame, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
 
-			// Adding the label
 			pt := image.Pt(predict.Left, predict.Top-5)
 			if predict.Top-5 < 0 {
 				pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
 			}
-			gocv.PutText(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, gocv.FontHersheyPlain, 2.2, color.RGBA{0, 255, 0, 0}, 2)
+			addLabelWithTTF(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
 
 			// Store snapshot of the object
 			if runtime.MotionVideo.ID != "" {
 				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtime.MotionVideo.ID, generateRandomString(4))
 				runtime.MotionVideo.Snapshots = append(runtime.MotionVideo.Snapshots, snapshotFilename)
-				gocv.IMWrite(fmt.Sprintf("%s/%s", globalConfig.Video.HiResPath, snapshotFilename), *frame)
+				saveJPEG(filepath.Join(globalConfig.Video.HiResPath, snapshotFilename), frame, 100)
 			} else {
 				Log("warning", "runtime.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
 			}
 		}
 	}
-
 }
+
+// func performDetectionOnObjectOLD(frame *gocv.Mat, prediction []Prediction) {
+// 	now := time.Now()
+
+// 	for _, predict := range prediction {
+// 		// If class is not within LookForClasses, skip it
+// 		if len(globalConfig.Motion.LookForClasses) > 0 {
+// 			found := false
+// 			for _, filterClass := range globalConfig.Motion.LookForClasses {
+// 				if predict.ClassName == filterClass {
+// 					found = true
+// 				}
+// 			}
+// 			if !found {
+// 				continue
+// 			}
+// 		}
+
+// 		if predict.Confidence < float32(globalConfig.Motion.ConfidenceMinThreshold) {
+// 			continue
+// 		}
+
+// 		rect := image.Rect(predict.Left, predict.Top, predict.Right, predict.Bottom)
+
+// 		object := TrackedObject{
+// 			BBox:       rect,
+// 			Center:     image.Pt((predict.Left+predict.Right)/2, (predict.Top+predict.Bottom)/2),
+// 			LastMoved:  now,
+// 			Area:       float64(rect.Dx() * rect.Dy()),
+// 			Class:      predict.ClassName,
+// 			Confidence: predict.Confidence,
+// 		}
+
+// 		exists := findObjectPosition(object)
+// 		if !exists {
+
+// 			// Check if this object is within the areas of interest
+// 			for _, ignoreAreaClass := range globalConfig.IgnoreAreasClasses {
+// 				for _, class := range ignoreAreaClass.Class {
+// 					if class == object.Class {
+// 						if object.Center.X > ignoreAreaClass.Left && object.Center.X < ignoreAreaClass.Right && object.Center.Y > ignoreAreaClass.Top && object.Center.Y < ignoreAreaClass.Bottom {
+// 							// This object is within an ignore area, skip it
+// 							// fmt.Printf("Ignoring object %s @ %d|%f\n", object, object.Center)
+// 							// Log("warning", fmt.Sprintf("IGNORING OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
+// 							return
+// 						}
+// 					}
+// 				}
+// 			}
+
+// 			Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
+// 			if !runtime.MotionTriggered {
+// 				// Lock mutex
+// 				runtime.MotionMutex.Lock()
+// 				runtime.MotionTriggered = true
+// 				runtime.MotionTriggeredLast = now
+// 				runtime.MotionVideo.CameraName = globalConfig.CameraName
+// 				runtime.MotionVideo.MotionStart = now
+// 				// Generate random string filename for runtime.MotionVideo.Filename
+// 				runtime.MotionVideo.ID = generateRandomString(15)
+// 				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
+// 				runtime.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtime.MotionVideo.ID)                                                            // Set filename for video file
+// 				runtime.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile)} // Start recording
+
+// 				// Unlock mutex
+// 				runtime.MotionMutex.Unlock()
+// 			} else {
+// 				// Lock mutex
+// 				runtime.MotionMutex.Lock()
+// 				runtime.MotionTriggeredLast = now
+// 				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
+// 				// Unlock mutex
+// 				runtime.MotionMutex.Unlock()
+// 			}
+
+// 			Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
+
+// 			gocv.Rectangle(frame, rect, color.RGBA{0, 255, 0, 0}, 2)
+
+// 			// Adding the label
+// 			pt := image.Pt(predict.Left, predict.Top-5)
+// 			if predict.Top-5 < 0 {
+// 				pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
+// 			}
+// 			gocv.PutText(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, gocv.FontHersheyPlain, 2.2, color.RGBA{0, 255, 0, 0}, 2)
+
+// 			// Store snapshot of the object
+// 			if runtime.MotionVideo.ID != "" {
+// 				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtime.MotionVideo.ID, generateRandomString(4))
+// 				runtime.MotionVideo.Snapshots = append(runtime.MotionVideo.Snapshots, snapshotFilename)
+// 				gocv.IMWrite(fmt.Sprintf("%s/%s", globalConfig.Video.HiResPath, snapshotFilename), *frame)
+// 			} else {
+// 				Log("warning", "runtime.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
+// 			}
+// 		}
+// 	}
+
+// }
 
 // Function that goes over lastPositions and checks if any of them are within of a threshold of the current center
 func findObjectPosition(object TrackedObject) bool {
@@ -1091,20 +973,25 @@ func findObjectPosition(object TrackedObject) bool {
 	return false
 }
 
-func streamImage(img *gocv.Mat, stream *mjpeg.Stream) {
+func streamImage(img *image.RGBA, stream *mjpeg.Stream) {
 	// Draw ignore areas from IgnoreAreasClasses
 	if globalConfig.StreamDrawIgnoredAreas {
 		for _, ignoreAreaClass := range globalConfig.IgnoreAreasClasses {
 			// Draw the ignore area
 			rect := image.Rect(ignoreAreaClass.Left, ignoreAreaClass.Top, ignoreAreaClass.Right, ignoreAreaClass.Bottom)
-			gocv.Rectangle(img, rect, color.RGBA{255, 0, 0, 0}, 2)
+			drawRectangle(img, rect, color.RGBA{255, 0, 0, 0}, 2)
 		}
 	}
 
-	// Stream video over http
-	buf, _ := gocv.IMEncode(".jpg", *img) // dereference the pointer to get the gocv.Mat value
-	stream.UpdateJPEG(buf.GetBytes())
-	buf.Close()
+	// Encode the RGBA image to JPEG
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		// Handle encoding error
+		return
+	}
+
+	// Stream video over HTTP
+	stream.UpdateJPEG(buf.Bytes())
 }
 
 func startWebcamStream(stream *mjpeg.Stream) {
@@ -1207,7 +1094,7 @@ func getClass(id int) string {
 	return classes[id]
 }
 
-func yoloPredict(imgRaw image.Image) ([]Prediction, error) {
+func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	// Create a channel to communicate the result of the function
 	resultChan := make(chan []Prediction, 1)
 	errorChan := make(chan error, 1)
@@ -1215,7 +1102,7 @@ func yoloPredict(imgRaw image.Image) ([]Prediction, error) {
 	// Start the actual work in a goroutine
 	go func() {
 		// Start timer
-		// start := time.Now()
+		start := time.Now()
 
 		// Convert the image to a byte array
 		buf := new(bytes.Buffer)
@@ -1270,6 +1157,13 @@ func yoloPredict(imgRaw image.Image) ([]Prediction, error) {
 			preds[i].Bottom = int(box[3])
 			preds[i].Left = int(box[0])
 			preds[i].Right = int(box[2])
+
+			preds[i].Took = float64(time.Since(start).Milliseconds())
+
+			// if preds[i].ClassName != getClass(pred.Object) {
+			// 	Log("warning", fmt.Sprintf("Class mismatch for predicted object: %s != %s", preds[i].ClassName, getClass(pred.Object)))
+			// }
+			// preds[i].ClassName = getClass(pred.Object)
 		}
 
 		resultChan <- preds
@@ -1435,37 +1329,37 @@ func copyAssetsToTemp() string {
 }
 
 // Function that stores embedded model files in a temp directory and sets globalConfig.ModelFile and globalConfig.ModelConfig to proper paths
-func storeModelFiles() error {
-	tmpDir, err := os.MkdirTemp("", "models")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %v", err)
-	}
+// func storeModelFiles() error {
+// 	tmpDir, err := os.MkdirTemp("", "models")
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create temp directory: %v", err)
+// 	}
 
-	modelFile := filepath.Join(tmpDir, "model.pb")
-	err = os.WriteFile(modelFile, embeddedModelFile, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write model file: %v", err)
-	}
+// 	modelFile := filepath.Join(tmpDir, "model.pb")
+// 	err = os.WriteFile(modelFile, embeddedModelFile, 0644)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to write model file: %v", err)
+// 	}
 
-	modelConfig := filepath.Join(tmpDir, "modelConfig.pbtxt")
-	err = os.WriteFile(modelConfig, embeddedModelConfig, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write model config: %v", err)
-	}
+// 	modelConfig := filepath.Join(tmpDir, "modelConfig.pbtxt")
+// 	err = os.WriteFile(modelConfig, embeddedModelConfig, 0644)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to write model config: %v", err)
+// 	}
 
-	globalConfig.ModelFile = modelFile
-	globalConfig.ModelConfig = modelConfig
+// 	globalConfig.ModelFile = modelFile
+// 	globalConfig.ModelConfig = modelConfig
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		os.RemoveAll(tmpDir)
-		os.Exit(0)
-	}()
+// 	c := make(chan os.Signal, 1)
+// 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+// 	go func() {
+// 		<-c
+// 		os.RemoveAll(tmpDir)
+// 		os.Exit(0)
+// 	}()
 
-	return nil
-}
+// 	return nil
+// }
 
 // This function prints out embedded template.json file
 func printTemplateFile() {
@@ -1487,4 +1381,97 @@ func generateRandomString(length int) string {
 	return string(b)
 }
 
-// Function that starts the webserver on port 4534
+func addLabelWithTTF(img draw.Image, text string, pt image.Point, textColor color.Color, fontSize float64) {
+	// fontBytes, err := os.ReadFile(fontPath)
+	// if err != nil {
+	// 	log.Printf("Error reading font file: %v", err)
+	// 	return
+	// }
+
+	// fontType, err := freetype.ParseFont(fontBytes)
+	// if err != nil {
+	// 	log.Printf("Error parsing font: %v", err)
+	// 	return
+	// }
+
+	// Set up the freetype context to draw the text
+	c := freetype.NewContext()
+	c.SetDPI(72)
+	c.SetFont(runtime.TextFont)
+	c.SetFontSize(fontSize)
+	c.SetClip(img.Bounds())
+	c.SetDst(img)
+	c.SetSrc(image.NewUniform(textColor))
+
+	// Draw the text
+	_, err := c.DrawString(text, fixed.Point26_6{
+		X: fixed.I(pt.X),
+		Y: fixed.I(pt.Y),
+	})
+	if err != nil {
+		log.Printf("Error drawing string: %v", err)
+	}
+}
+
+func drawRectangle(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
+	for i := 0; i < thickness; i++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			for y := rect.Min.Y + i; y < rect.Min.Y+i+1; y++ {
+				img.Set(x, y, col) // Top border
+			}
+			for y := rect.Max.Y - i - 1; y < rect.Max.Y-i; y++ {
+				img.Set(x, y, col) // Bottom border
+			}
+		}
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			for x := rect.Min.X + i; x < rect.Min.X+i+1; x++ {
+				img.Set(x, y, col) // Left border
+			}
+			for x := rect.Max.X - i - 1; x < rect.Max.X-i; x++ {
+				img.Set(x, y, col) // Right border
+			}
+		}
+	}
+}
+
+func CountChangedPixels(img1, img2 *image.RGBA, threshold uint8) int {
+	if img1.Bounds() != img2.Bounds() {
+		return -1
+	}
+
+	count := 0
+	for y := 0; y < img1.Bounds().Dy(); y++ {
+		for x := 0; x < img1.Bounds().Dx(); x++ {
+			offset := y*img1.Stride + x*4
+			r1, g1, b1 := int(img1.Pix[offset]), int(img1.Pix[offset+1]), int(img1.Pix[offset+2])
+			r2, g2, b2 := int(img2.Pix[offset]), int(img2.Pix[offset+1]), int(img2.Pix[offset+2])
+			gray1 := (299*r1 + 587*g1 + 114*b1) / 1000
+			gray2 := (299*r2 + 587*g2 + 114*b2) / 1000
+			diff := gray1 - gray2
+			if diff < 0 {
+				diff = -diff
+			}
+			if uint8(diff) > threshold {
+				count++
+			}
+		}
+	}
+
+	return count
+}
+
+func saveJPEG(filename string, img *image.RGBA, quality int) {
+	file, err := os.Create(filename)
+	if err != nil {
+		Log("error", fmt.Sprintf("File create error: %s", err))
+		return
+	}
+	defer file.Close()
+
+	options := &jpeg.Options{Quality: quality} // Quality ranges from 1 to 100
+	err = jpeg.Encode(file, img, options)
+	if err != nil {
+		Log("error", fmt.Sprintf("JPEG encode error: %s", err))
+		return
+	}
+}

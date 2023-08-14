@@ -2,9 +2,6 @@
     "cameraName": "front",
     "deviceUrl": "",
     "hiResDeviceUrl": "",
-    "useEmbeddedSSDMobileNetV1Model": false,
-    "modelFile": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17/frozen_inference_graph.pb",
-    "modelConfig": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17.pbtxt",
     "printDebug": false,
     "video": {
         "hiResPath": "rec/hi",
@@ -12,7 +9,7 @@
         "recodeTsToMp4": true
     },
     "motion": {
-        "objectMinThreshold": 0.3,
+        "confidenceMinThreshold": 0.3,
         "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
         "embeddedObjectDetector": false,
         "embeddedObjectScript": "objectDetectServerYolo.py",

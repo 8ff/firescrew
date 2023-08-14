@@ -2,20 +2,17 @@
     "cameraName": "demo",
     "deviceUrl": "rtsp://127.0.0.1:8553/lo",
     "hiResDeviceUrl": "rtsp://127.0.0.1:8554/hi",
-    "useEmbeddedSSDMobileNetV1Model": true,
-    "modelFile": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17/frozen_inference_graph.pb",
-    "modelConfig": "models/mobilenetV1/ssd_mobilenet_v1_coco_2017_11_17.pbtxt",
-    "printDebug": false,
+    "printDebug": true,
     "video": {
         "hiResPath": "rec/hi",
         "loResPath": "rec/lo",
         "recodeTsToMp4": true
     },
     "motion": {
-        "objectMinThreshold": 0.3,
+        "confidenceMinThreshold": 0.3,
         "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
         "embeddedObjectDetector": true,
-        "networkObjectDetectServer": "",
+        "embeddedObjectScript": "objectDetectServerYolo.py",
         "prebufferSeconds": 5,
         "eventGap": 10
     },

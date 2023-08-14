@@ -11,15 +11,24 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
 
+## Recent Changes
+### Release 2023-08-14
+
+#### What's Changed
+- **Remove all use of GOCV CGO in favor of pure go**: This will allow for easier cross compilation,faster builds and significant performance improvements
+- **Build docker container to support Linux/Windows/MacOS - AMD64/ARM64**: This will allow for easier deployment
+- **Add support for EdgeTPU Coral TPU**: This will allow for faster and more accurate detection
+- **Remove support for native MobileNET model via GOCV**: This will allow for easier cross compilation,faster builds, models like YOLO and EdgeTPU Coral TPU have shown much better performance and lower resource usage
+
+
 ## Installation
-### Docker * WORK IN PROGRESS *
+### Docker
 ```bash
 docker run -v config.json:config.json 8ffOrg/firescrew:latest
 ```
 
-
 ### Local
-Firescrew leverages the capabilities of `ffmpeg` to ensure optimal performance and broad compatibility, you will need to install them before use.
+Firescrew leverages the capabilities of `ffmpeg` to ensure optimal performance and broad compatibility, you will need to install it before use.
 ```bash
 apt-get install ffmpeg
 pip3 install ultralytics
@@ -100,7 +109,6 @@ Firescrew supports two different RTSP camera streams: a low resolution stream (`
 The `deviceUrl` should be set to a low resolution video feed, typically around 640x360. This stream is used for motion detection. Note that the resolution of this stream significantly impacts the CPU usage. A higher resolution will lead to more CPU usage, so it is recommended to keep this stream at a lower resolution.
 The `hiResDeviceUrl` should be set to a high resolution video feed, such as 1080p or higher. This stream is used to store video clips of motion events. As this stream is not used for motion detection, it can handle higher resolutions, enabling the capture of more detail in the recorded video clips.
 
-
 ## Configuration
 Firescrew uses a JSON configuration file for its settings. Here is a brief explanation of the various configuration parameters:
 
@@ -120,7 +128,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
 
     },
     "motion": {
-        "objectMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
+        "confidenceMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
         "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
         "embeddedObjectScript": "objectDetectServerYolo.py", // Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
@@ -144,6 +152,9 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
 
 ## Performance
 Firescrew's performance has been meticulously examined and optimized to ensure the fastest and most reliable object detection. The key aspects of this examination include comparing different RTSP feed methods and evaluating various model object detections. Here are the details:
+
+### Methods of motion detection
+**** TODO *****
 
 ### RTSP Feed Comparison
 Three different methods for parsing RTSP feeds were tested:
@@ -176,10 +187,8 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 **Stay Updated**: For the latest updates and news, please consider following [8ffChief on Twitter](http://twitter.com/8ffChief). Stay connected and be the first to know about new features, releases, and more!
 
 
-
-## TODO
-- Get rid go GoCV
-- Dockerfile
+## Roadmap
+- Standardize the way adapter scripts return data
 - GetDimensions Web UI
 - Finish notifications via slack/email?
 - Add benchmarks
@@ -188,4 +197,3 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 - MQTT Events
 - HA Integration
 - Yaml Config ?
-- Experiment with cropped motion detection ?

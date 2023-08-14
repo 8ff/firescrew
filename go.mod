@@ -6,10 +6,10 @@ require (
 	github.com/asticode/go-astits v1.13.0
 	github.com/bluenviron/gortsplib/v3 v3.10.0
 	github.com/bluenviron/mediacommon v1.0.0
+	github.com/goki/freetype v1.0.1
 	github.com/hybridgroup/mjpeg v0.0.0-20140228234708-4680f319790e
 	github.com/pion/rtp v1.8.1
 	github.com/tj/go-naturaldate v1.3.0
-	gocv.io/x/gocv v0.33.0
 	golang.org/x/image v0.11.0
 )
 

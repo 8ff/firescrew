@@ -3,7 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main # Change this if you want to trigger on a different branch
+      -  test
 
 env:
   IMAGE_NAME: 8fforg/firescrew
@@ -31,8 +31,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v2
         with:
-          context: . # Current directory as build context
-          file: docker/Dockerfile # Location of Dockerfile
+          context: .
+          file: docker/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest

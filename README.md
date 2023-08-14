@@ -153,8 +153,26 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
 ## Performance
 Firescrew's performance has been meticulously examined and optimized to ensure the fastest and most reliable object detection. The key aspects of this examination include comparing different RTSP feed methods and evaluating various model object detections. Here are the details:
 
-### Methods of motion detection
-**** TODO *****
+### Motion Detection Mechanism
+Motion detection system operates in two stages to optimize resource usage and deliver accurate results:
+
+1. **Event-Based Motion Check**:
+   - If there is an active motion-triggered event, the system directly proceeds to object detection.
+   - If no active event is detected, the system compares the amount of changed pixels between consecutive frames.
+   - This is done to avoid wasting CPU cycles and also to avoid missing objects once motion has been triggered.
+
+2. **Pixel Change Threshold**:
+   - A threshold defined in `objectAreaThreshold` is used to determine significant changes between frames.
+   - If the changes exceed this threshold, the frame is considered for further analysis.
+   - While it's difficult to have a value that fits all use cases, this approach helps reduce CPU usage as it has a lower cost than object detection.
+
+3. **Object Detection**:
+   - The frame, if qualified through the above stages, is passed to an object detection model.
+   - We use either YOLOv8 or Coral Edge TPU for object detection, depending on the configuration.
+   - After extensive testing, this setup has been found to offer the best balance between accuracy and resource consumption.
+
+The project continues to evolve, with a focus on enhancing performance and lowering resource consumption for an even more efficient and robust motion detection solution.
+
 
 ### RTSP Feed Comparison
 Three different methods for parsing RTSP feeds were tested:

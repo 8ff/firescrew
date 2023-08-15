@@ -39,7 +39,7 @@ WebUI Supports natural language processing for searching events, here are some o
 - **With Camera Name**
     - `front cars today`
 
-![demo2](media/demo2.png)
+![demo2](media/demo.png)
 
 * Background color of the events signify the same event to make it easier to separate them
 ![demo_selection](media/demo_selection.png)

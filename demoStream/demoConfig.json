@@ -5,7 +5,6 @@
     "printDebug": true,
     "video": {
         "hiResPath": "rec/hi",
-        "loResPath": "rec/lo",
         "recodeTsToMp4": true
     },
     "motion": {

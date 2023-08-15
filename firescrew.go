@@ -82,7 +82,6 @@ type Config struct {
 	Video struct {
 		HiResPath     string `json:"hiResPath"`
 		RecodeTsToMp4 bool   `json:"recodeTsToMp4"`
-		LoResPath     string `json:"loResPath"`
 	} `json:"video"`
 }
 
@@ -205,7 +204,6 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Device URL: %s", config.DeviceUrl))
 	Log("info", fmt.Sprintf("Hi-Res Device URL: %s", config.HiResDeviceUrl))
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
-	Log("info", fmt.Sprintf("Video LoResPath: %s", config.Video.LoResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
 	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
 	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ConfidenceMinThreshold))

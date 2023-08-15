@@ -16,6 +16,8 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **Model Flexibility**: Firescrew can use the latest YOLOv8 model or Coral EdgeTPU models for enhanced performance.
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
+- **Natural Language Search**: Firescrew supports natural language processing for searching events based on time/type/camera.
+- **In-House Quality Control**: At Firescrew, we believe in sampling our own "product," chasing the next high in innovation like caffeine-fueled engineers on a coding binge. We don't just build technology; we live it, breathe it, and occasionally spill coffee on it – all to ensure we're delivering a product that's up to snuff!
 
 ## Quick Start Demo
 ```bash

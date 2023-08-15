@@ -3,6 +3,7 @@
 # Firescrew
 [![](https://img.shields.io/static/v1?label=&message=Quick%20Start%20Demo&color=green)](#quick-start-demo)
 ![Docker Pulls](https://img.shields.io/docker/pulls/8fforg/firescrew)
+![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/t/8ff/firescrew)
 [![Twitter Follow](https://img.shields.io/twitter/follow/8ffChief)](https://twitter.com/8ffChief)
 
 
@@ -11,19 +12,9 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 ## Key Features
 - **Real-Time Motion Detection**: Firescrew can detect motion from a live feed and provide real-time alerts.
 - **Object Identification**: Identify specific objects like cars and people in real-time.
-- **Model Flexibility**: Firescrew can use the built-in Go model SSD Mobilenet V1, or it can use the latest YOLOv8 model via a Python adapter for faster and more accurate detection. Additionally, it now supports EdgeTPU models, allowing for the use of Coral TPU for enhanced performance.
+- **Model Flexibility**: Firescrew can use the latest YOLOv8 model or Coral EdgeTPU models for enhanced performance.
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
-
-## Recent Changes
-### Release 2023-08-14
-
-#### What's Changed
-- **Remove all use of GOCV CGO in favor of pure go**: This will allow for easier cross compilation,faster builds and significant performance improvements
-- **Build docker container to support Linux/Windows/MacOS - AMD64/ARM64**: This will allow for easier deployment
-- **Add support for EdgeTPU Coral TPU**: This will allow for faster and more accurate detection
-- **Remove support for native MobileNET model via GOCV**: This will allow for easier cross compilation,faster builds, models like YOLO and EdgeTPU Coral TPU have shown much better performance and lower resource usage
-
 
 ## Quick Start Demo
 ```bash
@@ -31,6 +22,27 @@ docker run --rm -it -p 8080:8080 8fforg/firescrew:latest demo
 # Point your browser to http://localhost:8080
 ```
 
+## WebUI
+WebUI Supports natural language processing for searching events, here are some of the examples:
+- **Today & Yesterday:**
+    - `today`
+    - `today 8am`
+    - `yesterday 3pm`
+- **Specific Dates:**
+    - `august 15th 10am`
+    - `last friday 2pm`
+- **Ranges:** Supports `from/to` and `between/and ranges`
+    - `from july 7th 5pm to july 7th 6pm`
+    - `last tuesday between 1pm and 2pm`
+- **With Keywords:**
+    - `people cars today between 10am and 1pm`
+- **With Camera Name**
+    - `front cars today`
+
+![demo2](media/demo2.png)
+
+* Background color of the events signify the same event to make it easier to separate them
+![demo_selection](media/demo_selection.png)
 
 ## Installation
 ### Docker
@@ -98,29 +110,6 @@ Starting WebUI
 ```bash
 go run firescrew.go -s rec/hi :8080
 ```
-
-## WebUI
-WebUI Supports natural language processing for searching events, here are some of the examples:
-- **Today & Yesterday:**
-    - `today`
-    - `today 8am`
-    - `yesterday 3pm`
-- **Specific Dates:**
-    - `august 15th 10am`
-    - `last friday 2pm`
-- **Ranges:** Supports `from/to` and `between/and ranges`
-    - `from july 7th 5pm to july 7th 6pm`
-    - `last tuesday between 1pm and 2pm`
-- **With Keywords:**
-    - `people cars today between 10am and 1pm`
-- **With Camera Name**
-    - `front cars today`
-
-![demo1](media/demo1.png)
-![demo2](media/demo2.png)
-
-* Background color of the events signify the same event to make it easier to separate them
-![demo_selection](media/demo_selection.png)
 
 
 ## Using Demo Stream from sample video
@@ -245,6 +234,14 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 
 **Stay Updated**: For the latest updates and news, please consider following [8ffChief on Twitter](http://twitter.com/8ffChief). Stay connected and be the first to know about new features, releases, and more!
 
+## Recent Changes
+### Release 2023-08-14
+
+#### What's Changed
+- **Remove all use of GOCV CGO in favor of pure go**: This will allow for easier cross compilation,faster builds and significant performance improvements
+- **Build docker container to support Linux/Windows/MacOS - AMD64/ARM64**: This will allow for easier deployment
+- **Add support for EdgeTPU Coral TPU**: This will allow for faster and more accurate detection
+- **Remove support for native MobileNET model via GOCV**: This will allow for easier cross compilation,faster builds, models like YOLO and EdgeTPU Coral TPU have shown much better performance and lower resource usage
 
 
 ## Roadmap

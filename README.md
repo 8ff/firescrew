@@ -17,8 +17,8 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 ## Quick Start Demo
 ```bash
 docker run --rm -it -p 8080:8080 8fforg/firescrew:latest demo
-# Point your browser to http://localhost:8080
 ```
+`# Point your browser to http://localhost:8080`
 
 ## WebUI
 WebUI Supports natural language processing for searching events, here are some of the examples:

@@ -2,6 +2,8 @@
 
 # Firescrew
 [![](https://img.shields.io/static/v1?label=&message=Quick%20Start%20Demo&color=green)](#quick-start-demo)
+![Docker Pulls](https://img.shields.io/docker/pulls/8fforg/firescrew)
+[![Twitter Follow](https://img.shields.io/twitter/follow/8ffChief)](https://twitter.com/8ffChief)
 
 
 Firescrew is a cutting-edge application written in Go that enables real-time object and motion detection from an RTSP network camera. It leverages advanced image processing techniques and machine learning models to identify specific objects such as cars, people, and more.
@@ -33,7 +35,7 @@ docker run --rm -it -p 8080:8080 8fforg/firescrew:latest demo
 ## Installation
 ### Docker
 ```bash
-docker pull 8ffOrg/firescrew:latest
+docker pull 8fforg/firescrew:latest
 ```
 
 ### Local
@@ -69,7 +71,7 @@ Using Coral TPU with Docker
 ```bash
 lsusb | grep Google
 # Take Bus and Device from the output of the above command and replace [bus] and [device] in the below command
-docker run -d --device=/dev/bus/usb/[bus]/[device] -v config.json:config.json 8ffOrg/firescrew:latest
+docker run -d --device=/dev/bus/usb/[bus]/[device] -v config.json:config.json 8fforg/firescrew:latest
 ```
 
 Help menu
@@ -242,6 +244,7 @@ Your input is highly valued! If you have ideas for new features, enhancements, o
 Your insights and perspectives are vital in shaping the future of Firescrew. Together, we can make it even better! Discussions serve as a dynamic space for collaboration and creativity, and ideas from this section may well be selected for future implementation. Let's work together to continue to innovate and improve Firescrew.
 
 **Stay Updated**: For the latest updates and news, please consider following [8ffChief on Twitter](http://twitter.com/8ffChief). Stay connected and be the first to know about new features, releases, and more!
+
 
 
 ## Roadmap

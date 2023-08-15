@@ -47,6 +47,7 @@ if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
   -c:v libx264 -preset veryfast -tune zerolatency -g 5 -r 25 -s 1920x1080 -b:v 5000k -rtsp_transport tcp -f rtsp rtsp://localhost:8554/hi >/pid3.log 2>&1|| fail "Failed to start ffmpeg" &
   PID3=$!
 
+  sleep 1
 
   exec nohup $BINARY_PATH ./demoConfig.json >/pid4.log 2>&1|| fail "Failed to start firescrew" &
   PID4=$!

@@ -2,8 +2,6 @@
 
 # Firescrew
 [![](https://img.shields.io/static/v1?label=&message=Quick%20Start%20Demo&color=green)](#quick-start-demo)
-![Docker Pulls](https://img.shields.io/docker/pulls/8fforg/firescrew)
-![GitHub commit activity (branch)](https://img.shields.io/github/commit-activity/t/8ff/firescrew)
 [![Twitter Follow](https://img.shields.io/twitter/follow/8ffChief)](https://twitter.com/8ffChief)
 
 

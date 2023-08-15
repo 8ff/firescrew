@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 from PIL import Image
-from tflite_runtime.interpreter import Interpreter, load_delegate
-import io
+from pycoral.utils.edgetpu import make_interpreter
+from pycoral.utils.dataset import read_label_file
+from pycoral.adapters import common
+from pycoral.adapters import detect
 import numpy as np
 import socket
 import json
 import threading
+import io
 
 # Load the TFLite model and allocate tensors
 model_path = "mobilenet_ssd_v2_coco_quant_postprocess_edgetpu.tflite"
-interpreter = Interpreter(
-    model_path=model_path,
-    experimental_delegates=[load_delegate('libedgetpu.so.1')]
-)
+interpreter = make_interpreter(model_path)
 interpreter.allocate_tensors()
-
-# Get input and output tensors
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
 
 # Class labels dictionary (same as provided)
 class_labels = {
@@ -130,68 +126,33 @@ def handle_client(conn):
 
     # Resize and preprocess the image
     image_resized = image.resize((300, 300))
-    img_rgb = np.array(image_resized)
-    input_data = np.expand_dims(img_rgb, axis=0)
+    input_data = np.array(image_resized)
+
+    # Set the input tensor
+    common.set_input(interpreter, input_data)
 
     # Run the model
-    interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
 
-    # Extract the output and postprocess it
-    boxes = interpreter.get_tensor(output_details[0]['index'])[0]
-    classes = interpreter.get_tensor(output_details[1]['index'])[0]
-    scores = interpreter.get_tensor(output_details[2]['index'])[0]
+    # Get the detection results
+    results = detect.get_objects(interpreter, threshold=0.50)
 
     predictions = []
-    threshold = 0.50
-    for i, box in enumerate(boxes):
-        if classes[i] in class_labels and scores[i] > threshold:
-            top, left, bottom, right = box * [300, 300, 300, 300]  # Assuming box is normalized
-            prediction = {
-                'object': i + 1,
-                'class_name': class_labels[classes[i]],
-                'box': box.tolist(),
-                'top': int(top),
-                'bottom': int(bottom),
-                'left': int(left),
-                'right': int(right),
-                'confidence': float(scores[i])
-            }
-            predictions.append(prediction)
+    for result in results:
+        prediction = {
+            'object': result.id + 1,
+            'class_name': class_labels[result.id],
+            'box': result.bbox,
+            'top': int(result.bbox[0]),
+            'bottom': int(result.bbox[2]),
+            'left': int(result.bbox[1]),
+            'right': int(result.bbox[3]),
+            'confidence': float(result.score)
+        }
+        predictions.append(prediction)
 
     # Convert the predictions to a JSON string
     predictions_json = json.dumps(predictions)
 
     # Send the results back to the client
-    conn.sendall((predictions_json + '\n').encode())
-
-    # Close the connection
-    conn.close()
-
-def main():
-    LISTEN_ADDR = "0.0.0.0"
-    LISTEN_PORT = 8555
-
-    # Create a socket object
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # Set the SO_REUSEADDR flag
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    # Bind the socket to a public host, and a port
-    s.bind((LISTEN_ADDR, LISTEN_PORT))
-    s.listen(5)
-
-    print("Server is listening on %s:%d" % (LISTEN_ADDR, LISTEN_PORT))
-
-    while True:
-        # Establish a connection with the client
-        conn, addr = s.accept()
-        print(f"Got connection from {addr}")
-
-        # Handle the client connection in a new thread
-        thread = threading.Thread(target=handle_client, args=(conn,))
-        thread.start()
-
-if __name__ == "__main__":
-    main()
+   

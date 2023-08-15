@@ -72,7 +72,6 @@ type Config struct {
 	EnableOutputStream            bool              `json:"enableOutputStream"`
 	OutputStreamAddr              string            `json:"outputStreamAddr"`
 	Motion                        struct {
-		EmbeddedObjectDetector    bool     `json:"EmbeddedObjectDetector"`
 		EmbeddedObjectScript      string   `json:"EmbeddedObjectScript"`
 		ConfidenceMinThreshold    float64  `json:"confidenceMinThreshold"`
 		LookForClasses            []string `json:"lookForClasses"`
@@ -190,17 +189,14 @@ func readConfig(path string) Config {
 		}
 	}
 
-	if config.Motion.EmbeddedObjectDetector {
-		if config.Motion.EmbeddedObjectScript == "" {
-			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be set")))
-			os.Exit(1)
-		}
+	if config.Motion.EmbeddedObjectScript == "" {
+		Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be set")))
+		os.Exit(1)
+	}
 
-		if config.Motion.EmbeddedObjectScript != "objectDetectServerYolo.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoral.py" {
-			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be either objectDetectServerYolo.py or objectDetectServerCoral.py")))
-			os.Exit(1)
-		}
-
+	if config.Motion.EmbeddedObjectScript != "objectDetectServerYolo.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoral.py" {
+		Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be either objectDetectServerYolo.py or objectDetectServerCoral.py")))
+		os.Exit(1)
 	}
 
 	// Print the configuration properties.
@@ -211,7 +207,6 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video LoResPath: %s", config.Video.LoResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
-	Log("info", fmt.Sprintf("Motion Embedded Object Detector: %t", config.Motion.EmbeddedObjectDetector))
 	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
 	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ConfidenceMinThreshold))
 	Log("info", fmt.Sprintf("Motion LookForClasses: %v", config.Motion.LookForClasses))
@@ -603,18 +598,15 @@ func main() {
 	// Define motion mutex
 	runtime.MotionMutex = &sync.Mutex{}
 
-	// If EmbeddedObjectDetector is set, run the embedded server
-	if globalConfig.Motion.EmbeddedObjectDetector {
-		// Copy assets to local filesystem
-		path := copyAssetsToTemp()
-		// Start the object detector
-		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
+	// Copy assets to local filesystem
+	path := copyAssetsToTemp()
+	// Start the object detector
+	go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 
-		// Set networkObjectDetectServer path to 127.0.0.1:8555
-		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
+	// Set networkObjectDetectServer path to 127.0.0.1:8555
+	globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
 
-		time.Sleep(5 * time.Second)
-	}
+	time.Sleep(5 * time.Second)
 
 	stream = mjpeg.NewStream()
 	if globalConfig.EnableOutputStream {

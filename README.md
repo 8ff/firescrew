@@ -1,6 +1,8 @@
 ![logo](media/logo.svg)
 
 # Firescrew
+[![](https://img.shields.io/static/v1?label=&message=Quick%20Start%20Demo&color=green)](#quick-start-demo)
+
 
 Firescrew is a cutting-edge application written in Go that enables real-time object and motion detection from an RTSP network camera. It leverages advanced image processing techniques and machine learning models to identify specific objects such as cars, people, and more.
 
@@ -21,10 +23,17 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **Remove support for native MobileNET model via GOCV**: This will allow for easier cross compilation,faster builds, models like YOLO and EdgeTPU Coral TPU have shown much better performance and lower resource usage
 
 
+## Quick Start Demo
+```bash
+docker run --rm -it -p 8080:8080 8fforg/firescrew:latest demo
+# Point your browser to http://localhost:8080
+```
+
+
 ## Installation
 ### Docker
 ```bash
-docker run -v config.json:config.json 8ffOrg/firescrew:latest
+docker pull 8ffOrg/firescrew:latest
 ```
 
 ### Local
@@ -37,6 +46,42 @@ curl -O firescrew -L https://github.com/8ff/firescrew/releases/download/latest/f
 
 
 ## Usage
+### Docker
+Generate config
+```bash
+# Store template config in config.json
+docker run --rm -it 8fforg/firescrew:latest -t > config.json
+```
+
+Run
+```bash
+# Run with config.json and mount media folder for persistent storage
+docker run --rm -v $(pwd)/media:/media -v $(pwd)/config.json:/config.json -it 8fforg/firescrew:latest /config.json
+```
+
+Serving from Docker
+```bash
+# Serve from ./media on port 8080 (./media must be defined in config.json)
+docker run --rm -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /footage :8080
+```
+
+Using Coral TPU with Docker
+```bash
+lsusb | grep Google
+# Take Bus and Device from the output of the above command and replace [bus] and [device] in the below command
+docker run -d --device=/dev/bus/usb/[bus]/[device] -v config.json:config.json 8ffOrg/firescrew:latest
+```
+
+Help menu
+```bash
+root@debian:~docker run --rm -it 8fforg/firescrew:latest -h
+Usage: firescrew [configfile]
+  -t, --template, t	Prints the template config to stdout
+  -h, --help, h		Prints this help message
+  -s, --serve, s	Starts the web server, requires: [path] [addr]
+  ```
+
+### Local
 Create a template config file
 ```bash
 ./firescrew -t > config.json
@@ -53,6 +98,7 @@ go run firescrew.go -s rec/hi :8080
 ```
 
 ## WebUI
+WebUI Supports natural language processing for searching events, here are some of the examples:
 - **Today & Yesterday:**
     - `today`
     - `today 8am`
@@ -75,19 +121,15 @@ go run firescrew.go -s rec/hi :8080
 ![demo_selection](media/demo_selection.png)
 
 
-## Demo
+## Using Demo Stream from sample video
 This will start a demo stream at `rtsp://localhost:8553/lo` and `rtsp://localhost:8554/hi`
 ```bash
 cd demoStream && ./startDemoStream.sh
 ```
 
 ## Dependencies Installation for YOLOv8
-If you choose to use the YOLOv8 model via the Python adapter for faster and more accurate detection, you will need to install the Ultralytics dependencies.
+Docker image already includes everything you need to get started but if you choose to run manually and use YoloV8 model, you will need to install the Ultralytics dependencies.
 You can do this by running the following command:
-```bash
-    pip install ultralytics
-```
-Or, if your default Python version is 2.x, you may need to use pip3:
 ```bash
     pip3 install ultralytics
 ```
@@ -99,9 +141,7 @@ Note: Make sure you have Python and pip (or pip3) installed on your system befor
 If you choose to use the EdgeTPU model via the Python adapter for faster and more accurate detection, you will need to install the Ultralytics dependencies.
 You can do this by running the following command:
 ```bash
-pip3 install tflite-runtime
-pip3 install numpy
-pip3 install Pillow
+pip3 install pycoral numpy Pillow
 ```
 
 ## RTSP Camera Stream URLs
@@ -130,7 +170,6 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     "motion": {
         "confidenceMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
-        "embeddedObjectDetector": true, // If true, embedded python Yolo8 server will be used
         "embeddedObjectScript": "objectDetectServerYolo.py", // Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
 
         "networkObjectDetectServer": "", // Address of the network object detection server.
@@ -139,7 +178,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     },
     "pixelMotionAreaThreshold": 50.00, // Minimum pixel motion area for an event to be triggered and passed to object detection.
     "objectCenterMovementThreshold": 50.0, // For stationary objects, minimum distance the center of an object should move for an event to be be considered new.
-    "objectAreaThreshold": 2000.0, // For stationary objects, difference in area of a bounding box to consider object as new.
+    "objectAreaThreshold": 500.0, // For stationary objects, difference in area of a bounding box to consider object as new.
     "ignoreAreasClasses": [
         // Array of classes and corresponding coordinates that should be ignored. Coordinates can be generated using getDimensions param.
         {"class": [], "coordinates": ""},

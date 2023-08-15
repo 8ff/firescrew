@@ -44,6 +44,13 @@ jobs:
   
         - name: Build Windows ARM64 binary
           run: GOOS=windows GOARCH=amd64 go build -ldflags "-X 'main.Version=$(date +'%Y-%m-%d_%H:%M:%S')'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.windows.arm64.exe"
+
+        - name: Build Linux ARM64 RTSP Server binary
+          run: cd demoStream/rtspServer; GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=$(date +'%Y-%m-%d_%H:%M:%S')'" -o "/tmp/build/rtspServer.linux.arm64"
+
+        - name: Build Linux AMD64 RTSP Server binary
+          run: cd demoStream/rtspServer; GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=$(date +'%Y-%m-%d_%H:%M:%S')'" -o "/tmp/build/rtspServer.linux.amd64"
+
   
         - name: Replace Existing Release
           run: /tmp/releaseMaker replace ${{ github.repository }} ${{ env.TAG }} "${{ env.RELEASE_NAME }}" "${{ env.RELEASE_BODY }}"

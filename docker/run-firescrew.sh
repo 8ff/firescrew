@@ -33,7 +33,7 @@ if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
   cd firescrew/demoStream || fail "Failed to change directory to demoStream"
 
 
-
+  echo "[+] Heating up burners..."
   # Start the RTSP servers and save their PIDs
   exec $RTSP_SERVER_BINARY_PATH :8553 >/pid1.log 2>&1 || fail "Failed to start RTSP server" &
   PID1=$!
@@ -55,7 +55,10 @@ if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
   exec $BINARY_PATH -s rec/hi :8080 1>/pid5.log 2>&1 || fail "Failed to serve WebUI" &
   PID5=$!
 
-  echo "[+] READY"
+# Wait until port 8080 is open and print a message
+  while ! nc -z localhost 8080 1>/dev/null 2>&1; do sleep 1; done
+  echo "[+] Lift off!"
+  echo *** Please note that demo mode uses significantly more cpu as rtsp streams are being simulated ***
 
   # Block here
   while true; do sleep 1; done

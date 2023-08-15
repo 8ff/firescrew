@@ -220,6 +220,16 @@ The comparison clearly revealed that YOLOv8 outperformed the Golang MobileNET in
 ### Conclusion
 Based on these comprehensive performance tests, Firescrew has adopted the use of the FFmpeg command for RTSP feed handling and the YOLOv8 model for object detection. This decision ensures the delivery of a fast, accurate, and high-quality solution for real-time object and motion detection. Additionally, the implementation of a network model adapter allows the support of any desired model detection, providing flexibility and adaptability for various use cases.
 
+## Running remote object detectors
+```bash
+git clone https://github.com/8ff/firescrew && cd firescrew/assets
+# YOLOV8
+./objectDetectServerYolo.py
+
+# Coral TPU
+./objectDetectServerCoral.py
+```
+
 
 ## Contribute Your Ideas
 Your input is highly valued! If you have ideas for new features, enhancements, or anything else you'd like to see in Firescrew you can contribute your ideas and suggestions by:

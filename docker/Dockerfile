@@ -10,7 +10,7 @@ RUN cd demoStream/rtspServer; GOOS=linux GOARCH=arm64 go build -ldflags "-X 'mai
 
 
 FROM debian:stable
-RUN apt-get update && apt-get install -y curl ffmpeg python3 python3-pip git
+RUN apt-get update && apt-get install -y curl ffmpeg python3 python3-pip git netcat-openbsd
 RUN pip3 install ultralytics pycoral numpy Pillow --break-system-packages
 COPY --from=firescrew-build-stage /bins /bins
 COPY --from=firescrew-build-stage /build/docker/run-firescrew.sh /run-firescrew.sh

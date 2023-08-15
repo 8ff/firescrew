@@ -245,6 +245,8 @@ func Log(level, msg string) {
 	switch level {
 	case "info":
 		fmt.Printf("\x1b[32m%s [INFO] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
+	case "notice":
+		fmt.Printf("\x1b[35m%s [INFO] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
 	case "error":
 		fmt.Printf("\x1b[31m%s [ERROR] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
 	case "warning":
@@ -599,12 +601,24 @@ func main() {
 	// Copy assets to local filesystem
 	path := copyAssetsToTemp()
 	// Start the object detector
-	go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 
-	// Set networkObjectDetectServer path to 127.0.0.1:8555
-	globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
-
-	time.Sleep(5 * time.Second)
+	if globalConfig.Motion.NetworkObjectDetectServer == "" {
+		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
+		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
+		// Set networkObjectDetectServer path to 127.0.0.1:8555
+		// time.Sleep(5 * time.Second)
+		// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
+		for {
+			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 10*time.Second)
+			if err != nil {
+				Log("notice", "Waiting for object detection server...")
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			conn.Close()
+			break
+		}
+	}
 
 	stream = mjpeg.NewStream()
 	if globalConfig.EnableOutputStream {
@@ -627,7 +641,7 @@ func main() {
 	go func(frameChannel chan FrameMsg) {
 		for {
 			processRTSPFeed(globalConfig.DeviceUrl, frameChannel)
-			Log("warning", "EXITED")
+			// Log("warning", "EXITED")
 			//*********** EXITS BELOW ***********//
 			time.Sleep(5 * time.Second)
 			Log("warning", "Restarting LO RTSP feed")
@@ -809,7 +823,7 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				runtime.MotionMutex.Unlock()
 			}
 
-			Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
+			// Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
 
 			drawRectangle(frame, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
 
@@ -830,104 +844,6 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 		}
 	}
 }
-
-// func performDetectionOnObjectOLD(frame *gocv.Mat, prediction []Prediction) {
-// 	now := time.Now()
-
-// 	for _, predict := range prediction {
-// 		// If class is not within LookForClasses, skip it
-// 		if len(globalConfig.Motion.LookForClasses) > 0 {
-// 			found := false
-// 			for _, filterClass := range globalConfig.Motion.LookForClasses {
-// 				if predict.ClassName == filterClass {
-// 					found = true
-// 				}
-// 			}
-// 			if !found {
-// 				continue
-// 			}
-// 		}
-
-// 		if predict.Confidence < float32(globalConfig.Motion.ConfidenceMinThreshold) {
-// 			continue
-// 		}
-
-// 		rect := image.Rect(predict.Left, predict.Top, predict.Right, predict.Bottom)
-
-// 		object := TrackedObject{
-// 			BBox:       rect,
-// 			Center:     image.Pt((predict.Left+predict.Right)/2, (predict.Top+predict.Bottom)/2),
-// 			LastMoved:  now,
-// 			Area:       float64(rect.Dx() * rect.Dy()),
-// 			Class:      predict.ClassName,
-// 			Confidence: predict.Confidence,
-// 		}
-
-// 		exists := findObjectPosition(object)
-// 		if !exists {
-
-// 			// Check if this object is within the areas of interest
-// 			for _, ignoreAreaClass := range globalConfig.IgnoreAreasClasses {
-// 				for _, class := range ignoreAreaClass.Class {
-// 					if class == object.Class {
-// 						if object.Center.X > ignoreAreaClass.Left && object.Center.X < ignoreAreaClass.Right && object.Center.Y > ignoreAreaClass.Top && object.Center.Y < ignoreAreaClass.Bottom {
-// 							// This object is within an ignore area, skip it
-// 							// fmt.Printf("Ignoring object %s @ %d|%f\n", object, object.Center)
-// 							// Log("warning", fmt.Sprintf("IGNORING OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
-// 							return
-// 						}
-// 					}
-// 				}
-// 			}
-
-// 			Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
-// 			if !runtime.MotionTriggered {
-// 				// Lock mutex
-// 				runtime.MotionMutex.Lock()
-// 				runtime.MotionTriggered = true
-// 				runtime.MotionTriggeredLast = now
-// 				runtime.MotionVideo.CameraName = globalConfig.CameraName
-// 				runtime.MotionVideo.MotionStart = now
-// 				// Generate random string filename for runtime.MotionVideo.Filename
-// 				runtime.MotionVideo.ID = generateRandomString(15)
-// 				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
-// 				runtime.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtime.MotionVideo.ID)                                                            // Set filename for video file
-// 				runtime.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile)} // Start recording
-
-// 				// Unlock mutex
-// 				runtime.MotionMutex.Unlock()
-// 			} else {
-// 				// Lock mutex
-// 				runtime.MotionMutex.Lock()
-// 				runtime.MotionTriggeredLast = now
-// 				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
-// 				// Unlock mutex
-// 				runtime.MotionMutex.Unlock()
-// 			}
-
-// 			Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
-
-// 			gocv.Rectangle(frame, rect, color.RGBA{0, 255, 0, 0}, 2)
-
-// 			// Adding the label
-// 			pt := image.Pt(predict.Left, predict.Top-5)
-// 			if predict.Top-5 < 0 {
-// 				pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
-// 			}
-// 			gocv.PutText(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, gocv.FontHersheyPlain, 2.2, color.RGBA{0, 255, 0, 0}, 2)
-
-// 			// Store snapshot of the object
-// 			if runtime.MotionVideo.ID != "" {
-// 				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtime.MotionVideo.ID, generateRandomString(4))
-// 				runtime.MotionVideo.Snapshots = append(runtime.MotionVideo.Snapshots, snapshotFilename)
-// 				gocv.IMWrite(fmt.Sprintf("%s/%s", globalConfig.Video.HiResPath, snapshotFilename), *frame)
-// 			} else {
-// 				Log("warning", "runtime.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
-// 			}
-// 		}
-// 	}
-
-// }
 
 // Function that goes over lastPositions and checks if any of them are within of a threshold of the current center
 func findObjectPosition(object TrackedObject) bool {

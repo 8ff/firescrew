@@ -5,7 +5,6 @@
 [![Twitter Follow](https://img.shields.io/twitter/follow/8ffChief)](https://twitter.com/8ffChief)
 [![Slack](https://img.shields.io/badge/Slack-Join%20Us-%25234A154B?labelColor=purple&color=red)](https://join.slack.com/t/8ff/shared_invite/zt-217rrews6-3kUh5K1UQPPEctPt5kC2vA)
 
-
 ```json
 *** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
 ```
@@ -81,7 +80,7 @@ docker run --rm -v $(pwd)/media:/media -v $(pwd)/config.json:/config.json -it 8f
 Serving from Docker
 ```bash
 # Serve from ./media on port 8080 (./media must be defined in config.json)
-docker run --rm -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /media :8080
+docker run --rm -p 8080:8080 -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /media :8080
 ```
 
 Using Coral TPU with Docker

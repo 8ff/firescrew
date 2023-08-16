@@ -25,5 +25,18 @@
     ],
     "streamDrawIgnoredAreas": true,
     "enableOutputStream": true,
-    "outputStreamAddr": ":8040"
+    "outputStreamAddr": ":8040",
+    "events": {
+        "webhookUrl": "",
+        "scriptPath": "",
+        "slack": {
+            "url": "" },
+        "mqtt": {
+            "host": "",
+            "port": "",
+            "user": "",
+            "password": "",
+            "topic": ""
+        }
+    }
 }

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/8ff/firescrew/pkg/firescrewServe"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/goki/freetype"
 	"github.com/goki/freetype/truetype"
 	"golang.org/x/image/bmp"
@@ -83,11 +84,25 @@ type Config struct {
 		HiResPath     string `json:"hiResPath"`
 		RecodeTsToMp4 bool   `json:"recodeTsToMp4"`
 	} `json:"video"`
+	Events struct {
+		Mqtt struct {
+			Host  string `json:"host"`
+			Port  int    `json:"port"`
+			User  string `json:"user"`
+			Pass  string `json:"pass"`
+			Topic string `json:"topic"`
+		}
+		Slack struct {
+			Url string `json:"url"`
+		}
+		ScriptPath string `json:"scriptPath"`
+		Webhook    string `json:"webhookUrl"`
+	} `json:"events"`
 }
 
 // TODO ADD MUTEX LOCK
 type Runtime struct {
-	MotionTriggeredLast time.Time `json:"motionTriggeredLast"`
+	MotionTriggeredLast time.Time `json:"motionTriggredLast"`
 	MotionTriggered     bool      `json:"motionTriggered"`
 	// MotionTriggeredChan chan bool `json:"motionTriggeredChan"`
 	// MotionHiRecOn bool `json:"motionHiRecOn"`
@@ -129,6 +144,22 @@ type VideoMetadata struct {
 	Snapshots    []string
 	VideoFile    string
 	CameraName   string
+}
+
+type Event struct {
+	Type                string          `json:"type"`
+	Timestamp           time.Time       `json:"timestamp"`
+	MotionTriggeredLast time.Time       `json:"motionTriggeredLast"`
+	ID                  string          `json:"id"`
+	MotionStart         time.Time       `json:"motionStart"`
+	MotionEnd           time.Time       `json:"motionEnd"`
+	Objects             []TrackedObject `json:"objects"`
+	RecodedToMp4        bool            `json:"recodedToMp4"`
+	Snapshots           []string        `json:"snapshots"`
+	VideoFile           string          `json:"videoFile"`
+	CameraName          string          `json:"cameraName"`
+	MetadataPath        string          `json:"metadataPath"`
+	PredictedObjects    []Prediction    `json:"predictedObjects"`
 }
 
 var lastPositions = []TrackedObject{}
@@ -221,6 +252,13 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Draw Ignored Areas: %t", config.StreamDrawIgnoredAreas))
 	Log("info", fmt.Sprintf("Enable Output Stream: %t", config.EnableOutputStream))
 	Log("info", fmt.Sprintf("Output Stream Address: %s", config.OutputStreamAddr))
+	Log("info", "************* EVENTS CONFIG *************")
+	Log("info", fmt.Sprintf("Events MQTT Host: %s", config.Events.Mqtt.Host))
+	Log("info", fmt.Sprintf("Events MQTT Port: %d", config.Events.Mqtt.Port))
+	Log("info", fmt.Sprintf("Events MQTT Topic: %s", config.Events.Mqtt.Topic))
+	Log("info", fmt.Sprintf("Events Slack URL: %s", config.Events.Slack.Url))
+	Log("info", fmt.Sprintf("Events Script Path: %s", config.Events.ScriptPath))
+	Log("info", fmt.Sprintf("Events Webhook URL: %s", config.Events.Webhook))
 	Log("info", "************************************************")
 
 	// Load font into runtime
@@ -239,6 +277,65 @@ func readConfig(path string) Config {
 	runtime.TextFont = font
 
 	return config
+}
+
+func eventHandler(eventType string, payload []byte) {
+	// Log the event type
+	Log("notice", fmt.Sprintf("Event: %s", eventType))
+
+	// Webhook URL
+	if globalConfig.Events.Webhook != "" {
+		resp, err := http.Post(globalConfig.Events.Webhook, "application/json", bytes.NewReader(payload))
+		if err != nil {
+			Log("error", fmt.Sprintf("Failed to post to webhook: %s", err))
+		} else {
+			defer resp.Body.Close()
+		}
+	}
+
+	// Script Path
+	if globalConfig.Events.ScriptPath != "" {
+		cmd := exec.Command(globalConfig.Events.ScriptPath)
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			Log("error", fmt.Sprintf("Failed to get stdin pipe: %s", err))
+			return
+		}
+
+		go func() {
+			defer stdin.Close()
+			_, err := stdin.Write(payload)
+			if err != nil {
+				Log("error", fmt.Sprintf("Failed to write to stdin: %s", err))
+			}
+		}()
+
+		if err := cmd.Start(); err != nil {
+			Log("error", fmt.Sprintf("Failed to start script: %s", err))
+		}
+	}
+
+	// Send to Slack
+	if globalConfig.Events.Slack.Url != "" {
+		slackMessage := map[string]interface{}{
+			"text": fmt.Sprintf("Event: %s\nPayload: %s", eventType, string(payload)),
+		}
+		slackPayload, _ := json.Marshal(slackMessage)
+		resp, err := http.Post(globalConfig.Events.Slack.Url, "application/json", bytes.NewReader(slackPayload))
+		if err != nil {
+			Log("error", fmt.Sprintf("Failed to post to Slack: %s", err))
+		} else {
+			defer resp.Body.Close()
+		}
+	}
+
+	// Send to MQTT
+	if globalConfig.Events.Mqtt.Host != "" && globalConfig.Events.Mqtt.Port != 0 && globalConfig.Events.Mqtt.Topic != "" {
+		err := sendToMQTT(globalConfig.Events.Mqtt.Topic, string(payload), globalConfig.Events.Mqtt.Host, globalConfig.Events.Mqtt.Port, globalConfig.Events.Mqtt.User, globalConfig.Events.Mqtt.Pass)
+		if err != nil {
+			Log("error", fmt.Sprintf("Failed to send to MQTT: %s", err))
+		}
+	}
 }
 
 func Log(level, msg string) {
@@ -519,7 +616,6 @@ func recodeToMP4(inputFile string) (string, error) {
 }
 
 func main() {
-
 	// Check if there is a config file argument, if there isnt give error and exit
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Not enough arguments provided\n")
@@ -648,6 +744,9 @@ func main() {
 		}
 	}(frameChannel)
 
+	// These are used to keep a 5 frame avg of inference time
+	// var inferenceAvgTime float64
+	// var inferenceAvgCounter int
 	for msg := range frameChannel {
 		if msg.Error != "" {
 			Log("error", msg.Error)
@@ -700,6 +799,43 @@ func main() {
 						Log("error", fmt.Sprintf("Error writing metadata file: %v", err))
 					}
 
+					// Notify in realtime about detected objects
+					type Event struct {
+						Type                string          `json:"type"`
+						Timestamp           time.Time       `json:"timestamp"`
+						MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
+						ID                  string          `json:"id"`
+						MotionStart         time.Time       `json:"motion_start"`
+						MotionEnd           time.Time       `json:"motion_end"`
+						Objects             []TrackedObject `json:"objects"`
+						RecodedToMp4        bool            `json:"recoded_to_mp4"`
+						Snapshots           []string        `json:"snapshots"`
+						VideoFile           string          `json:"video_file"`
+						CameraName          string          `json:"camera_name"`
+						MetadataPath        string          `json:"metadata_path"`
+					}
+
+					eventRaw := Event{
+						Type:                "motion_ended",
+						Timestamp:           time.Now(),
+						MotionTriggeredLast: runtime.MotionTriggeredLast,
+						ID:                  runtime.MotionVideo.ID,
+						MotionStart:         runtime.MotionVideo.MotionStart,
+						MotionEnd:           runtime.MotionVideo.MotionEnd,
+						Objects:             runtime.MotionVideo.Objects,
+						RecodedToMp4:        runtime.MotionVideo.RecodedToMp4,
+						Snapshots:           runtime.MotionVideo.Snapshots,
+						VideoFile:           runtime.MotionVideo.VideoFile,
+						CameraName:          runtime.MotionVideo.CameraName,
+						MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtime.MotionVideo.ID)),
+					}
+					eventJson, err := json.Marshal(eventRaw)
+					if err != nil {
+						Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+						return
+					}
+					eventHandler("motion_end", eventJson)
+
 					// 	// Clear the whole runtime.MotionVideo struct
 					runtime.MotionVideo = VideoMetadata{}
 
@@ -715,6 +851,7 @@ func main() {
 						}
 						// Only run this on every 5th frame
 						if msg.Frame != nil {
+
 							// Send data to objectPredict
 							predict, err := objectPredict(msg.Frame)
 							if err != nil {
@@ -722,9 +859,24 @@ func main() {
 								return
 							}
 
-							// for _, inst := range predict {
-							// 	Log("warning", fmt.Sprintf("InferenceTook: %fms", inst.Took))
-							// }
+							// Notify in realtime about detected objects
+							type Event struct {
+								Type             string       `json:"type"`
+								Timestamp        time.Time    `json:"timestamp"`
+								PredictedObjects []Prediction `json:"predicted_objects"`
+							}
+
+							eventRaw := Event{
+								Type:             "objects_detected",
+								Timestamp:        time.Now(),
+								PredictedObjects: predict,
+							}
+							eventJson, err := json.Marshal(eventRaw)
+							if err != nil {
+								Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+								return
+							}
+							eventHandler("objects_detected", eventJson)
 
 							performDetectionOnObject(rgba, predict)
 						}
@@ -812,6 +964,33 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				runtime.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtime.MotionVideo.ID)                                                            // Set filename for video file
 				runtime.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile)} // Start recording
 
+				// Notify in realtime about detected objects
+				type Event struct {
+					Type                string    `json:"type"`
+					Timestamp           time.Time `json:"timestamp"`
+					MotionTriggeredLast time.Time `json:"motion_triggered_last"`
+					ID                  string    `json:"id"`
+					MotionStart         time.Time `json:"motion_start"`
+					Objects             []TrackedObject
+					CameraName          string `json:"camera_name"`
+				}
+
+				eventRaw := Event{
+					Type:                "motion_started",
+					Timestamp:           time.Now(),
+					MotionTriggeredLast: time.Now(),
+					ID:                  runtime.MotionVideo.ID,
+					MotionStart:         runtime.MotionVideo.MotionStart,
+					Objects:             runtime.MotionVideo.Objects,
+					CameraName:          runtime.MotionVideo.CameraName,
+				}
+				eventJson, err := json.Marshal(eventRaw)
+				if err != nil {
+					Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+					return
+				}
+				eventHandler("motion_start", eventJson)
+
 				// Unlock mutex
 				runtime.MotionMutex.Unlock()
 			} else {
@@ -819,6 +998,34 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				runtime.MotionMutex.Lock()
 				runtime.MotionTriggeredLast = now
 				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
+
+				// Notify in realtime about detected objects
+				type Event struct {
+					Type                string    `json:"type"`
+					Timestamp           time.Time `json:"timestamp"`
+					MotionTriggeredLast time.Time `json:"motion_triggered_last"`
+					ID                  string    `json:"id"`
+					MotionStart         time.Time `json:"motion_start"`
+					Objects             []TrackedObject
+					CameraName          string `json:"camera_name"`
+				}
+
+				eventRaw := Event{
+					Type:                "motion_update",
+					Timestamp:           time.Now(),
+					MotionTriggeredLast: time.Now(),
+					ID:                  runtime.MotionVideo.ID,
+					MotionStart:         runtime.MotionVideo.MotionStart,
+					Objects:             runtime.MotionVideo.Objects,
+					CameraName:          runtime.MotionVideo.CameraName,
+				}
+				eventJson, err := json.Marshal(eventRaw)
+				if err != nil {
+					Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+					return
+				}
+				eventHandler("motion_update", eventJson)
+
 				// Unlock mutex
 				runtime.MotionMutex.Unlock()
 			}
@@ -1380,4 +1587,32 @@ func saveJPEG(filename string, img *image.RGBA, quality int) {
 		Log("error", fmt.Sprintf("JPEG encode error: %s", err))
 		return
 	}
+}
+
+func sendToMQTT(topic string, message string, host string, port int, user string, pass string) error {
+	// MQTT client options
+	opts := mqtt.NewClientOptions().AddBroker(fmt.Sprintf("tcp://%s:%d", host, port))
+
+	if user != "" && pass != "" {
+		opts.SetUsername(user)
+		opts.SetPassword(pass)
+	}
+
+	// Create and connect the client
+	client := mqtt.NewClient(opts)
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		Log("error", fmt.Sprintf("Failed to connect to MQTT: %s", token.Error()))
+		return token.Error() // Return the connection error
+	}
+	defer client.Disconnect(250)
+
+	// Publish the message
+	token := client.Publish(topic, 0, false, message)
+	token.Wait()
+	if token.Error() != nil {
+		Log("error", fmt.Sprintf("Failed to publish to MQTT: %s", token.Error()))
+		return token.Error() // Return the publishing error
+	}
+
+	return nil // Return nil if there were no errors
 }

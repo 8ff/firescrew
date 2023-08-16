@@ -6,7 +6,9 @@
 [![Slack](https://img.shields.io/badge/Slack-Join%20Us-%25234A154B?labelColor=purple&color=red)](https://join.slack.com/t/8ff/shared_invite/zt-217rrews6-3kUh5K1UQPPEctPt5kC2vA)
 
 
-
+```json
+*** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
+```
 
 Firescrew is a cutting-edge application written in Go that enables real-time object and motion detection from an RTSP network camera. It leverages advanced image processing techniques and machine learning models to identify specific objects such as cars, people, and more.
 
@@ -16,6 +18,7 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **Model Flexibility**: Firescrew can use the latest YOLOv8 model or Coral EdgeTPU models for enhanced performance.
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
+- **MQTT/Webhook/Script/Slack**: Firescrew can send events to MQTT/Webhook/Script/Slack for further processing.
 - **Natural Language Search**: Firescrew supports natural language processing for searching events based on time/type/camera.
 - **In-House Quality Control**: At Firescrew, we believe in sampling our own "product," chasing the next high in innovation like caffeine-fueled engineers on a coding binge. We don't just build technology; we live it, breathe it, and occasionally spill coffee on it – all to ensure we're delivering a product that's up to snuff!
 
@@ -176,7 +179,20 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     ],
     "streamDrawIgnoredAreas": true, // If true, ignored areas will be drawn on the stream.
     "enableOutputStream": true, // If true, an output stream will be enabled.
-    "outputStreamAddr": "" // Address of the output stream. Eg: 0.0.0.0:8050
+    "outputStreamAddr":, "" // Address of the output stream. Eg: 0.0.0.0:8050
+        "events": { 
+        "webhookUrl": "", // POST request will be made to this url for every event.
+        "scriptPath": "", // JSON string will be piped to STDIN of this script for every event. Example script can be found in assets/eventHandler.sh
+        "slack": {
+            "url": "" }, // JSON will be sent to this slack webhook for every event.
+        "mqtt": { // JSON will be sent to this MQTT server for every event.
+            "host": "broker.hivemq.com",
+            "port": 1883,
+            "user": "",
+            "password": "",
+            "topic": "firescrew"
+        }
+    }
 }
 ```
 

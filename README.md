@@ -273,10 +273,7 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 ## Roadmap
 - Standardize the way adapter scripts return data
 - GetDimensions Web UI
-- Finish notifications via slack/email?
 - Add benchmarks
-- Event via external script
 - Add uploading footage to cloud
-- MQTT Events
 - HA Integration
 - Yaml Config ?

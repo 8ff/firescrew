@@ -81,7 +81,7 @@ docker run --rm -v $(pwd)/media:/media -v $(pwd)/config.json:/config.json -it 8f
 Serving from Docker
 ```bash
 # Serve from ./media on port 8080 (./media must be defined in config.json)
-docker run --rm -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /footage :8080
+docker run --rm -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /media :8080
 ```
 
 Using Coral TPU with Docker

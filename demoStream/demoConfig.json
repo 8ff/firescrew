@@ -1,7 +1,17 @@
 {
     "cameraName": "demo",
     "deviceUrl": "rtsp://127.0.0.1:8553/lo",
+    "loStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "hiResDeviceUrl": "rtsp://127.0.0.1:8554/hi",
+    "hiStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "printDebug": true,
     "video": {
         "hiResPath": "rec/hi",

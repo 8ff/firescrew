@@ -168,7 +168,17 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
 {
     "cameraName": "", // This will be used in the video file metadata to identify which camera the clip belongs to
     "deviceUrl": "", // URL of the low resolution video feed.
+        "loStreamParamBypass": { // With some cameras ffprobe may not return the correct resolution, you can use this to bypass it
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "hiResDeviceUrl": "", // URL of the high resolution video feed.
+        "hiStreamParamBypass": { // With some cameras ffprobe may not return the correct resolution, you can use this to bypass it
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "useEmbeddedSSDMobileNetV1Model": false, // If true, modelFile and modelConfig dont need to be specified as the embedded version of SSDMobileNetV1 will be used.
     "modelFile": "", // Path to the .pb file of the model.
     "modelConfig": "", // Path to the .pbtxt file of the model configuration.

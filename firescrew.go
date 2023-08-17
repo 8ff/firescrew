@@ -67,7 +67,9 @@ type Config struct {
 	CameraName                    string            `json:"cameraName"`
 	PrintDebug                    bool              `json:"printDebug"`
 	DeviceUrl                     string            `json:"deviceUrl"`
+	LoStreamParamBypass           StreamParams      `json:"loStreamParamBypass"`
 	HiResDeviceUrl                string            `json:"hiResDeviceUrl"`
+	HiStreamParamBypass           StreamParams      `json:"hiStreamParamBypass"`
 	PixelMotionAreaThreshold      float64           `json:"pixelMotionAreaThreshold"`
 	ObjectCenterMovementThreshold float64           `json:"objectCenterMovementThreshold"`
 	ObjectAreaThreshold           float64           `json:"objectAreaThreshold"`
@@ -103,6 +105,12 @@ type Config struct {
 	} `json:"events"`
 }
 
+type StreamParams struct {
+	Width  int
+	Height int
+	FPS    float64
+}
+
 // TODO ADD MUTEX LOCK
 type RuntimeConfig struct {
 	MotionTriggeredLast time.Time `json:"motionTriggredLast"`
@@ -113,6 +121,8 @@ type RuntimeConfig struct {
 	MotionVideo         VideoMetadata
 	MotionMutex         *sync.Mutex
 	TextFont            *truetype.Font
+	LoResStreamParams   StreamParams
+	HiResStreamParams   StreamParams
 }
 
 type IgnoreAreaClass struct {
@@ -236,6 +246,8 @@ func readConfig(path string) Config {
 	Log("info", "******************** CONFIG ********************")
 	Log("info", fmt.Sprintf("Print Debug: %t", config.PrintDebug))
 	Log("info", fmt.Sprintf("Device URL: %s", config.DeviceUrl))
+	Log("info", fmt.Sprintf("Lo-Res Param Bypass: Res: %dx%d FPS: %.2f", config.LoStreamParamBypass.Width, config.LoStreamParamBypass.Height, config.LoStreamParamBypass.FPS))
+	Log("info", fmt.Sprintf("Hi-Res Param Bypass: Res: %dx%d FPS: %.2f", config.HiStreamParamBypass.Width, config.HiStreamParamBypass.Height, config.HiStreamParamBypass.FPS))
 	Log("info", fmt.Sprintf("Hi-Res Device URL: %s", config.HiResDeviceUrl))
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
@@ -690,32 +702,53 @@ func main() {
 		os.Exit(2)
 	}
 
-	// Print HI/LO stream details
-	hiResStreamInfo, err := getStreamInfo(globalConfig.HiResDeviceUrl)
-	if err != nil {
-		Log("error", fmt.Sprintf("Error getting stream info: %v", err))
-		return
-	}
-	loResStreamInfo, err := getStreamInfo(globalConfig.DeviceUrl)
-	if err != nil {
-		Log("error", fmt.Sprintf("Error getting stream info: %v", err))
-		return
+	if globalConfig.LoStreamParamBypass.Width == 0 || globalConfig.LoStreamParamBypass.Height == 0 || globalConfig.LoStreamParamBypass.FPS == 0 {
+		// Print HI/LO stream details
+		hiResStreamInfo, err := getStreamInfo(globalConfig.HiResDeviceUrl)
+		if err != nil {
+			Log("error", fmt.Sprintf("Error getting stream info: %v", err))
+			return
+		}
+
+		if len(hiResStreamInfo.Streams) == 0 {
+			Log("error", fmt.Sprintf("No HI res streams found at %s", globalConfig.HiResDeviceUrl))
+			return
+		}
+
+		runtimeConfig.HiResStreamParams = StreamParams{
+			Width:  hiResStreamInfo.Streams[0].Width,
+			Height: hiResStreamInfo.Streams[0].Height,
+			FPS:    hiResStreamInfo.Streams[0].RFrameRate,
+		}
+	} else {
+		runtimeConfig.HiResStreamParams = globalConfig.LoStreamParamBypass
 	}
 
-	if len(hiResStreamInfo.Streams) == 0 {
-		Log("error", fmt.Sprintf("No HI res streams found at %s", globalConfig.HiResDeviceUrl))
-		return
+	if globalConfig.LoStreamParamBypass.Width == 0 || globalConfig.LoStreamParamBypass.Height == 0 || globalConfig.LoStreamParamBypass.FPS == 0 {
+		loResStreamInfo, err := getStreamInfo(globalConfig.DeviceUrl)
+		if err != nil {
+			Log("error", fmt.Sprintf("Error getting stream info: %v", err))
+			return
+		}
+
+		if len(loResStreamInfo.Streams) == 0 {
+			Log("error", fmt.Sprintf("No LO res streams found at %s", globalConfig.DeviceUrl))
+			return
+		}
+
+		runtimeConfig.LoResStreamParams = StreamParams{
+			Width:  loResStreamInfo.Streams[0].Width,
+			Height: loResStreamInfo.Streams[0].Height,
+			FPS:    loResStreamInfo.Streams[0].RFrameRate,
+		}
+	} else {
+		runtimeConfig.LoResStreamParams = globalConfig.LoStreamParamBypass
 	}
 
-	if len(loResStreamInfo.Streams) == 0 {
-		Log("error", fmt.Sprintf("No LO res streams found at %s", globalConfig.DeviceUrl))
-		return
-	}
-
-	// Print stream info
+	// Print stream info from runtimeConfig
 	Log("info", "******************** STREAM INFO ********************")
-	Log("info", fmt.Sprintf("Hi-Res Stream Resolution: %dx%d FPS: %.2f", hiResStreamInfo.Streams[0].Width, hiResStreamInfo.Streams[0].Height, hiResStreamInfo.Streams[0].RFrameRate))
-	Log("info", fmt.Sprintf("Lo-Res Stream Resolution: %dx%d FPS: %.2f", loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height, loResStreamInfo.Streams[0].RFrameRate))
+	Log("info", fmt.Sprintf("Lo-Res Stream Resolution: %dx%d FPS: %.2f", runtimeConfig.LoResStreamParams.Width, runtimeConfig.LoResStreamParams.Height, runtimeConfig.LoResStreamParams.FPS))
+	Log("info", fmt.Sprintf("Hi-Res Stream Resolution: %dx%d FPS: %.2f", runtimeConfig.HiResStreamParams.Width, runtimeConfig.HiResStreamParams.Height, runtimeConfig.HiResStreamParams.FPS))
 	Log("info", "*****************************************************")
 
 	// Define motion mutex
@@ -749,7 +782,7 @@ func main() {
 	}
 
 	// Define the last image
-	imgLast := image.NewRGBA(image.Rect(0, 0, loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height))
+	imgLast := image.NewRGBA(image.Rect(0, 0, runtimeConfig.HiResStreamParams.Width, runtimeConfig.HiResStreamParams.Height))
 
 	// Start HI Res prebuffering
 	runtimeConfig.HiResControlChannel = make(chan RecordMsg)

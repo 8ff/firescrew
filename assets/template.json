@@ -1,7 +1,17 @@
 {
     "cameraName": "front",
     "deviceUrl": "",
+    "loStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "hiResDeviceUrl": "",
+    "hiStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
     "printDebug": false,
     "video": {
         "hiResPath": "rec/hi",

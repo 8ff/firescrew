@@ -369,9 +369,9 @@ type FrameMsg struct {
 
 type StreamInfo struct {
 	Streams []struct {
-		Width      int `json:"width"`
-		Height     int `json:"height"`
-		RFrameRate int `json:"-"`
+		Width      int     `json:"width"`
+		Height     int     `json:"height"`
+		RFrameRate float64 `json:"-"`
 	} `json:"streams"`
 }
 
@@ -392,6 +392,8 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 		return StreamInfo{}, err
 	}
 
+	Log("debug", fmt.Sprintf("ffprobe url: %s output: %s", rtspURL, output))
+
 	// Unmarshal into a temporary structure to get the raw frame rate
 	var rawInfo struct {
 		Streams []struct {
@@ -411,15 +413,17 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 			continue // Skip streams with zero values
 		}
 		frParts := strings.Split(stream.RFrameRate, "/")
-		if len(frParts) == 2 && frParts[1] == "1" {
-			frameRate, err := strconv.Atoi(frParts[0])
-			if err != nil {
-				return StreamInfo{}, err
+		if len(frParts) == 2 {
+			numerator, err1 := strconv.Atoi(frParts[0])
+			denominator, err2 := strconv.Atoi(frParts[1])
+			if err1 != nil || err2 != nil || denominator == 0 {
+				return StreamInfo{}, fmt.Errorf("Invalid frame rate: %s", stream.RFrameRate)
 			}
+			frameRate := float64(numerator) / float64(denominator) // Calculate FPS
 			info.Streams = append(info.Streams, struct {
-				Width      int `json:"width"`
-				Height     int `json:"height"`
-				RFrameRate int `json:"-"`
+				Width      int     `json:"width"`
+				Height     int     `json:"height"`
+				RFrameRate float64 `json:"-"`
 			}{
 				Width:      stream.Width,
 				Height:     stream.Height,
@@ -710,8 +714,8 @@ func main() {
 
 	// Print stream info
 	Log("info", "******************** STREAM INFO ********************")
-	Log("info", fmt.Sprintf("Hi-Res Stream Resolution: %dx%d FPS: %d", hiResStreamInfo.Streams[0].Width, hiResStreamInfo.Streams[0].Height, hiResStreamInfo.Streams[0].RFrameRate))
-	Log("info", fmt.Sprintf("Lo-Res Stream Resolution: %dx%d FPS: %d", loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height, loResStreamInfo.Streams[0].RFrameRate))
+	Log("info", fmt.Sprintf("Hi-Res Stream Resolution: %dx%d FPS: %.2f", hiResStreamInfo.Streams[0].Width, hiResStreamInfo.Streams[0].Height, hiResStreamInfo.Streams[0].RFrameRate))
+	Log("info", fmt.Sprintf("Lo-Res Stream Resolution: %dx%d FPS: %.2f", loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height, loResStreamInfo.Streams[0].RFrameRate))
 	Log("info", "*****************************************************")
 
 	// Define motion mutex

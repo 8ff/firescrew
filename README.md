@@ -12,6 +12,9 @@
 - Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
 - Docker image will now fetch latest binaries from github at runtime
 - Discord server has been added
+- Performance updates for model adapters
+- Fixed Coral TPU model detection
+- Added inference statistics and much more!
 ***
 *** New Release 16/Aug - Added ffprobe timeout/Fixed MQTT port in template/Added docs page  ***
 *** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
@@ -204,7 +207,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     },
     "pixelMotionAreaThreshold": 50.00, // Minimum pixel motion area for an event to be triggered and passed to object detection.
     "objectCenterMovementThreshold": 50.0, // For stationary objects, minimum distance the center of an object should move for an event to be be considered new.
-    "objectAreaThreshold": 300.0, // For stationary objects, difference in area of a bounding box to consider object as new.
+    "objectAreaThreshold": 2000.0, // For stationary objects, difference in area of a bounding box to consider object as new.
     "ignoreAreasClasses": [
         // Array of classes and corresponding coordinates that should be ignored. Coordinates can be generated using getDimensions param.
         {"class": [], "coordinates": ""},

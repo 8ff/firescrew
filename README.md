@@ -7,17 +7,16 @@
 [![Docs](https://img.shields.io/badge/Docs-View-blue)](https://8ff.github.io/firescrew/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-blue.svg?labelColor=757ef8&color=green)](https://discord.gg/CgB7nXqv6N)
 
-```json
-*** New Release 17/Aug
-- Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
-- Docker image will now fetch latest binaries from github at runtime
-- Discord server has been added
-- Performance updates for model adapters
-- Fixed Coral TPU model detection
+```
+Things added/fixed in last 3 days:
+- Added MQTT/Webhook/ScriptHook/Slack support!
+- Added ffprobe timeout/Fixed MQTT port in template/Added docs page
 - Added inference statistics and much more!
-***
-*** New Release 16/Aug - Added ffprobe timeout/Fixed MQTT port in template/Added docs page  ***
-*** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
+- Fixed Coral TPU model detection
+- Performance updates for model adapters
+- Discord server has been added
+- Docker image will now fetch latest binaries from github at runtime
+- Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
 ```
 
 > Docs: https://8ff.github.io/firescrew/

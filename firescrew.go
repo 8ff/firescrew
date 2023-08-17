@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"embed"
 	_ "net/http/pprof"
 
@@ -379,7 +380,11 @@ type RecordMsg struct {
 }
 
 func getStreamInfo(rtspURL string) (StreamInfo, error) {
-	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", rtspURL)
+	// Create a context that will time out
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "ffprobe", "-rtsp_transport", "tcp", "-v", "quiet", "-print_format", "json", "-show_streams", rtspURL)
 	output, err := cmd.Output()
 	if err != nil {
 		return StreamInfo{}, err

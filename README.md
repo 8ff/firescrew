@@ -4,10 +4,15 @@
 [![](https://img.shields.io/static/v1?label=&message=Quick%20Start%20Demo&color=green)](#quick-start-demo)
 [![Twitter Follow](https://img.shields.io/twitter/follow/8ffChief)](https://twitter.com/8ffChief)
 [![Slack](https://img.shields.io/badge/Slack-Join%20Us-%25234A154B?labelColor=purple&color=red)](https://join.slack.com/t/8ff/shared_invite/zt-217rrews6-3kUh5K1UQPPEctPt5kC2vA)
+[![Docs](https://img.shields.io/badge/Docs-View-blue)](https://8ff.github.io/firescrew/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Server-blue.svg?labelColor=757ef8&color=green)](https://discord.gg/CgB7nXqv6N)
 
 ```json
+*** New Release 16/Aug - Added ffprobe timeout/Fixed MQTT port in template/Added docs page  ***
 *** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
 ```
+
+> Docs: https://8ff.github.io/firescrew/
 
 Firescrew is a cutting-edge application written in Go that enables real-time object and motion detection from an RTSP network camera. It leverages advanced image processing techniques and machine learning models to identify specific objects such as cars, people, and more.
 

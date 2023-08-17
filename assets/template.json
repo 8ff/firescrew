@@ -33,7 +33,7 @@
             "url": "" },
         "mqtt": {
             "host": "",
-            "port": 0,
+            "port": 1883,
             "user": "",
             "password": "",
             "topic": ""

@@ -204,7 +204,7 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     },
     "pixelMotionAreaThreshold": 50.00, // Minimum pixel motion area for an event to be triggered and passed to object detection.
     "objectCenterMovementThreshold": 50.0, // For stationary objects, minimum distance the center of an object should move for an event to be be considered new.
-    "objectAreaThreshold": 500.0, // For stationary objects, difference in area of a bounding box to consider object as new.
+    "objectAreaThreshold": 300.0, // For stationary objects, difference in area of a bounding box to consider object as new.
     "ignoreAreasClasses": [
         // Array of classes and corresponding coordinates that should be ignored. Coordinates can be generated using getDimensions param.
         {"class": [], "coordinates": ""},

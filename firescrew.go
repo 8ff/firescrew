@@ -318,7 +318,7 @@ func readConfig(path string) Config {
 
 func eventHandler(eventType string, payload []byte) {
 	// Log the event type
-	Log("notice", fmt.Sprintf("Event: %s", eventType))
+	Log("event", fmt.Sprintf("Event: %s", eventType))
 
 	// Webhook URL
 	if globalConfig.Events.Webhook != "" {
@@ -380,7 +380,9 @@ func Log(level, msg string) {
 	case "info":
 		fmt.Printf("\x1b[32m%s [INFO] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
 	case "notice":
-		fmt.Printf("\x1b[35m%s [INFO] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
+		fmt.Printf("\x1b[35m%s [NOTICE] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
+	case "event":
+		fmt.Printf("\x1b[34m%s [EVENT] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
 	case "error":
 		fmt.Printf("\x1b[31m%s [ERROR] %s\x1b[0m\n", time.Now().Format("15:04:05"), msg)
 	case "warning":
@@ -1044,7 +1046,7 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				}
 			}
 
-			Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
+			Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ COORD: %d AREA: %f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
 			if !runtimeConfig.MotionTriggered {
 				// Lock mutex
 				runtimeConfig.MotionMutex.Lock()

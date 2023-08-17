@@ -27,14 +27,14 @@
     },
     "pixelMotionAreaThreshold": 50.00,
     "objectCenterMovementThreshold": 50.0,
-    "objectAreaThreshold": 2000.0,
+    "objectAreaThreshold": 300.0,
     "ignoreAreasClasses": [
         {"class": ["template"], "coordinates": "0,0,0,0"},
         {"class": ["car", "truck", "train", "suitcase"], "coordinates": "133,356,114,397"},
         {"class": ["car", "truck", "train", "suitcase"], "coordinates": "93,274,290,547"}
     ],
-    "streamDrawIgnoredAreas": true,
-    "enableOutputStream": true,
+    "streamDrawIgnoredAreas": false,
+    "enableOutputStream": false,
     "outputStreamAddr": ":8040",
     "events": {
         "webhookUrl": "",

@@ -864,24 +864,26 @@ func main() {
 								return
 							}
 
-							// Notify in realtime about detected objects
-							type Event struct {
-								Type             string       `json:"type"`
-								Timestamp        time.Time    `json:"timestamp"`
-								PredictedObjects []Prediction `json:"predicted_objects"`
-							}
+							if len(predict) > 0 {
+								// Notify in realtime about detected objects
+								type Event struct {
+									Type             string       `json:"type"`
+									Timestamp        time.Time    `json:"timestamp"`
+									PredictedObjects []Prediction `json:"predicted_objects"`
+								}
 
-							eventRaw := Event{
-								Type:             "objects_detected",
-								Timestamp:        time.Now(),
-								PredictedObjects: predict,
+								eventRaw := Event{
+									Type:             "objects_detected",
+									Timestamp:        time.Now(),
+									PredictedObjects: predict,
+								}
+								eventJson, err := json.Marshal(eventRaw)
+								if err != nil {
+									Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+									return
+								}
+								eventHandler("objects_detected", eventJson)
 							}
-							eventJson, err := json.Marshal(eventRaw)
-							if err != nil {
-								Log("error", fmt.Sprintf("Error marshalling event: %v", err))
-								return
-							}
-							eventHandler("objects_detected", eventJson)
 
 							performDetectionOnObject(rgba, predict)
 						}

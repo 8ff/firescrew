@@ -49,6 +49,9 @@ var Version string
 //go:embed assets/*
 var assetsFs embed.FS
 
+var everyNthFrame = 5          // Only process every Nth frame for object detection
+var interenceAvgInterval = 100 // Frames to average inference time over
+
 var stream *mjpeg.Stream
 
 type Prediction struct {
@@ -838,9 +841,11 @@ func main() {
 		}
 	}(frameChannel)
 
-	// These are used to keep a 5 frame avg of inference time
+	// Calculate avg inference time
+	// Log every 100 frames everyNth as 5 thats 20 seconds
 	// var inferenceAvgTime float64
 	// var inferenceAvgCounter int
+	inferenceTimingLog := make([]float64, 0)
 	for msg := range frameChannel {
 		if msg.Error != "" {
 			Log("error", msg.Error)
@@ -939,7 +944,7 @@ func main() {
 
 				if globalConfig.Motion.NetworkObjectDetectServer != "" {
 					// Python motion detection
-					if predictFrameCounter%5 == 0 {
+					if predictFrameCounter%everyNthFrame == 0 {
 						if predictFrameCounter > 10000 {
 							predictFrameCounter = 0
 						}
@@ -953,6 +958,53 @@ func main() {
 								return
 							}
 
+							// Calculate avg of all predict times for this run
+							inferenceSubAvg := make([]float64, 0)
+							for _, prediction := range predict {
+								inferenceSubAvg = append(inferenceSubAvg, prediction.Took)
+							}
+
+							// Calculate avg inference time
+							inferenceAvgTime := 0.0
+							for _, inferenceTime := range inferenceSubAvg {
+								inferenceAvgTime += inferenceTime
+							}
+							inferenceAvgTime = inferenceAvgTime / float64(len(inferenceSubAvg))
+
+							// Add to global inferenceTimingLog
+							inferenceTimingLog = append(inferenceTimingLog, inferenceAvgTime)
+
+							if len(inferenceTimingLog) > interenceAvgInterval {
+								// Calculate avg inference time
+								inferenceAvgTime = 0.0
+								for _, inferenceTime := range inferenceTimingLog {
+									inferenceAvgTime += inferenceTime
+								}
+								inferenceAvgTime = inferenceAvgTime / float64(len(inferenceTimingLog))
+
+								// Log avg inference time
+								type Event struct {
+									Type         string    `json:"type"`
+									Timestamp    time.Time `json:"timestamp"`
+									InferenceAvg float64   `json:"inference_avg"`
+								}
+
+								eventRaw := Event{
+									Type:         "inferencing_avg",
+									Timestamp:    time.Now(),
+									InferenceAvg: inferenceAvgTime,
+								}
+								eventJson, err := json.Marshal(eventRaw)
+								if err != nil {
+									Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+									return
+								}
+								eventHandler("inference_avg", eventJson)
+
+								// Clear inferenceTimingLog
+								inferenceTimingLog = make([]float64, 0)
+							}
+
 							if len(predict) > 0 {
 								// Notify in realtime about detected objects
 								type Event struct {
@@ -962,7 +1014,7 @@ func main() {
 								}
 
 								eventRaw := Event{
-									Type:             "objects_detected",
+									Type:             "objects_predicted",
 									Timestamp:        time.Now(),
 									PredictedObjects: predict,
 								}
@@ -1414,7 +1466,7 @@ func startObjectDetector(scriptPath string) {
 			os.Exit(1)
 		}
 
-		cmd := exec.Command("python3", scriptPath)
+		cmd := exec.Command("python3", "-u", scriptPath)
 		cmd.Dir = basePath
 
 		stdout, err := cmd.StdoutPipe()
@@ -1483,7 +1535,7 @@ func readOutput(r io.ReadCloser) {
 			continue
 		}
 
-		Log("debug", out)
+		Log("debug", fmt.Sprintf("PYTHON_MODEL_STDOUT: %s", out))
 	}
 }
 

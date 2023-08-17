@@ -7,18 +7,6 @@
 [![Docs](https://img.shields.io/badge/Docs-View-blue)](https://8ff.github.io/firescrew/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-blue.svg?labelColor=757ef8&color=green)](https://discord.gg/CgB7nXqv6N)
 
-```
-Things added/fixed in last 3 days:
-- Added MQTT/Webhook/ScriptHook/Slack support!
-- Added ffprobe timeout/Fixed MQTT port in template/Added docs page
-- Added inference statistics and much more!
-- Fixed Coral TPU model detection
-- Performance updates for model adapters
-- Discord server has been added
-- Docker image will now fetch latest binaries from github at runtime
-- Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
-```
-
 > Docs: https://8ff.github.io/firescrew/
 
 Firescrew is a cutting-edge application written in Go that enables real-time object and motion detection from an RTSP network camera. It leverages advanced image processing techniques and machine learning models to identify specific objects such as cars, people, and more.
@@ -32,6 +20,18 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 - **MQTT/Webhook/Script/Slack**: Firescrew can send events to MQTT/Webhook/Script/Slack for further processing.
 - **Natural Language Search**: Firescrew supports natural language processing for searching events based on time/type/camera.
 - **In-House Quality Control**: At Firescrew, we believe in sampling our own "product," chasing the next high in innovation like caffeine-fueled engineers on a coding binge. We don't just build technology; we live it, breathe it, and occasionally spill coffee on it – all to ensure we're delivering a product that's up to snuff!
+
+```
+Things added/fixed in last 3 days:
+- Added MQTT/Webhook/ScriptHook/Slack support!
+- Added ffprobe timeout/Fixed MQTT port in template/Added docs page
+- Added inference statistics and much more!
+- Fixed Coral TPU model detection
+- Performance updates for model adapters
+- Discord server has been added
+- Docker image will now fetch latest binaries from github at runtime
+- Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
+```
 
 ## Quick Start Demo
 ```bash

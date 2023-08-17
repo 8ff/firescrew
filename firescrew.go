@@ -186,6 +186,28 @@ type Frame struct {
 	Pts  time.Duration
 }
 
+type FrameMsg struct {
+	Frame image.Image
+	Error string
+	// Exited   bool
+	ExitCode int
+}
+
+type StreamInfo struct {
+	Streams []struct {
+		Width      int     `json:"width"`
+		Height     int     `json:"height"`
+		CodecType  string  `json:"codec_type"`
+		RFrameRate float64 `json:"-"`
+	} `json:"streams"`
+}
+
+// RecordMsg struct to control recording
+type RecordMsg struct {
+	Record   bool
+	Filename string
+}
+
 func readConfig(path string) Config {
 	// Read the configuration file.
 	configFile, err := os.ReadFile(path)
@@ -372,27 +394,6 @@ func Log(level, msg string) {
 	}
 }
 
-type FrameMsg struct {
-	Frame image.Image
-	Error string
-	// Exited   bool
-	ExitCode int
-}
-
-type StreamInfo struct {
-	Streams []struct {
-		Width      int     `json:"width"`
-		Height     int     `json:"height"`
-		RFrameRate float64 `json:"-"`
-	} `json:"streams"`
-}
-
-// RecordMsg struct to control recording
-type RecordMsg struct {
-	Record   bool
-	Filename string
-}
-
 func getStreamInfo(rtspURL string) (StreamInfo, error) {
 	// Create a context that will time out
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -411,6 +412,7 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 		Streams []struct {
 			Width      int    `json:"width"`
 			Height     int    `json:"height"`
+			CodecType  string `json:"codec_type"`
 			RFrameRate string `json:"r_frame_rate"`
 		} `json:"streams"`
 	}
@@ -429,16 +431,18 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 			numerator, err1 := strconv.Atoi(frParts[0])
 			denominator, err2 := strconv.Atoi(frParts[1])
 			if err1 != nil || err2 != nil || denominator == 0 {
-				return StreamInfo{}, fmt.Errorf("Invalid frame rate: %s", stream.RFrameRate)
+				return StreamInfo{}, fmt.Errorf("invalid frame rate: %s", stream.RFrameRate)
 			}
 			frameRate := float64(numerator) / float64(denominator) // Calculate FPS
 			info.Streams = append(info.Streams, struct {
 				Width      int     `json:"width"`
 				Height     int     `json:"height"`
+				CodecType  string  `json:"codec_type"`
 				RFrameRate float64 `json:"-"`
 			}{
 				Width:      stream.Width,
 				Height:     stream.Height,
+				CodecType:  stream.CodecType,
 				RFrameRate: frameRate,
 			})
 		}
@@ -706,19 +710,33 @@ func main() {
 		// Print HI/LO stream details
 		hiResStreamInfo, err := getStreamInfo(globalConfig.HiResDeviceUrl)
 		if err != nil {
-			Log("error", fmt.Sprintf("Error getting stream info: %v", err))
-			return
+			Log("error", fmt.Sprintf("Error getting stream info: ffprobe: %v", err))
+			os.Exit(3)
 		}
 
 		if len(hiResStreamInfo.Streams) == 0 {
 			Log("error", fmt.Sprintf("No HI res streams found at %s", globalConfig.HiResDeviceUrl))
-			return
+			os.Exit(3)
+		}
+
+		// Find stream with codec_type: video
+		streamIndex := -1
+		for index, stream := range hiResStreamInfo.Streams {
+			if stream.CodecType == "video" {
+				streamIndex = index
+				break
+			}
+		}
+
+		if streamIndex == -1 {
+			Log("error", fmt.Sprintf("No video stream found at %s", globalConfig.HiResDeviceUrl))
+			os.Exit(3)
 		}
 
 		runtimeConfig.HiResStreamParams = StreamParams{
-			Width:  hiResStreamInfo.Streams[0].Width,
-			Height: hiResStreamInfo.Streams[0].Height,
-			FPS:    hiResStreamInfo.Streams[0].RFrameRate,
+			Width:  hiResStreamInfo.Streams[streamIndex].Width,
+			Height: hiResStreamInfo.Streams[streamIndex].Height,
+			FPS:    hiResStreamInfo.Streams[streamIndex].RFrameRate,
 		}
 	} else {
 		runtimeConfig.HiResStreamParams = globalConfig.LoStreamParamBypass
@@ -728,18 +746,32 @@ func main() {
 		loResStreamInfo, err := getStreamInfo(globalConfig.DeviceUrl)
 		if err != nil {
 			Log("error", fmt.Sprintf("Error getting stream info: %v", err))
-			return
+			os.Exit(3)
 		}
 
 		if len(loResStreamInfo.Streams) == 0 {
 			Log("error", fmt.Sprintf("No LO res streams found at %s", globalConfig.DeviceUrl))
-			return
+			os.Exit(3)
+		}
+
+		// Find stream with codec_type: video
+		streamIndex := -1
+		for index, stream := range loResStreamInfo.Streams {
+			if stream.CodecType == "video" {
+				streamIndex = index
+				break
+			}
+		}
+
+		if streamIndex == -1 {
+			Log("error", fmt.Sprintf("No video stream found at %s", globalConfig.DeviceUrl))
+			os.Exit(3)
 		}
 
 		runtimeConfig.LoResStreamParams = StreamParams{
-			Width:  loResStreamInfo.Streams[0].Width,
-			Height: loResStreamInfo.Streams[0].Height,
-			FPS:    loResStreamInfo.Streams[0].RFrameRate,
+			Width:  loResStreamInfo.Streams[streamIndex].Width,
+			Height: loResStreamInfo.Streams[streamIndex].Height,
+			FPS:    loResStreamInfo.Streams[streamIndex].RFrameRate,
 		}
 	} else {
 		runtimeConfig.LoResStreamParams = globalConfig.LoStreamParamBypass

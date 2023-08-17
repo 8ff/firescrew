@@ -165,6 +165,7 @@ pip3 install pycoral numpy Pillow
 Firescrew supports two different RTSP camera streams: a low resolution stream (`deviceUrl`) and a high resolution stream (`hiResDeviceUrl`). These streams are used for different purposes and should be set up accordingly.
 The `deviceUrl` should be set to a low resolution video feed, typically around 640x360. This stream is used for motion detection. Note that the resolution of this stream significantly impacts the CPU usage. A higher resolution will lead to more CPU usage, so it is recommended to keep this stream at a lower resolution.
 The `hiResDeviceUrl` should be set to a high resolution video feed, such as 1080p or higher. This stream is used to store video clips of motion events. As this stream is not used for motion detection, it can handle higher resolutions, enabling the capture of more detail in the recorded video clips.
+Firescrew uses tcp for RTSP streams by default to avoid lost frames. If you camera does not support tcp - please open an issue and we will add support for it.
 
 ## Configuration
 Firescrew uses a JSON configuration file for its settings. Here is a brief explanation of the various configuration parameters:

@@ -542,13 +542,13 @@ func recordRTSPStream(rtspURL string, controlChannel <-chan RecordMsg, prebuffer
 	cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-i", rtspURL, "-c", "copy", "-f", "mpegts", "pipe:1")
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Fatal(err)
+		Log("error", fmt.Sprintf("Error creating pipe: %v", err))
 		return
 	}
 
 	err = cmd.Start()
 	if err != nil {
-		log.Fatal(err)
+		Log("error", fmt.Sprintf("Error starting ffmpeg: %v", err))
 		return
 	}
 

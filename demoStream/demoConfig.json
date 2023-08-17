@@ -21,10 +21,11 @@
         "confidenceMinThreshold": 0.3,
         "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
         "embeddedObjectScript": "objectDetectServerYolo.py",
+        "networkObjectDetectServer": "",
         "prebufferSeconds": 5,
         "eventGap": 10
     },
-    "pixelMotionAreaThreshold": 50.00,
+    "pixelMotionAreaThreshold": 0.00,
     "objectCenterMovementThreshold": 50.0,
     "objectAreaThreshold": 1000.0,
     "ignoreAreasClasses": [

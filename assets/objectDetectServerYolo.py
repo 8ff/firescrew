@@ -19,52 +19,57 @@ def recvall(sock, count):
         count -= len(newbuf)
     return buf
 
-def handle_client(conn):
-    # Read the frame length (assumed to be sent as a 4-byte integer)
-    frame_len_bytes = conn.recv(4)
-    frame_len = int.from_bytes(frame_len_bytes, 'big')
+def handle_client(conn, addr):
+    while True:
+        # Read the frame length (assumed to be sent as a 4-byte integer)
+        frame_len_bytes = conn.recv(4)
+        if not frame_len_bytes:
+            print('Client closed connection.')
+            break
 
-    # Read the frame data
-    frame_data = recvall(conn, frame_len)
+        frame_len = int.from_bytes(frame_len_bytes, 'big')
 
-    if frame_data is None:
-        print('Client closed connection.')
-        conn.close()
-        return
+        # Read the frame data
+        frame_data = recvall(conn, frame_len)
 
-# Convert the raw bytes into an image
-    image = Image.open(io.BytesIO(frame_data))
+        if frame_data is None:
+            print('Client closed connection.')
+            break
 
-    # Convert the image into a NumPy array
-    image_np = np.array(image)
+        # Convert the raw bytes into an image
+        image = Image.open(io.BytesIO(frame_data))
 
-    # Here you would process the frame data with the YOLO model
-    results_list = model(image_np)  
-    results = results_list[0]
+        # Convert the image into a NumPy array
+        image_np = np.array(image)
 
-    # Get the detected objects, their bounding boxes, and confidence scores
-    predictions = []
-    for idx, (box, conf, cls) in enumerate(zip(results.boxes.xyxy, results.boxes.conf, results.boxes.cls)):
-        # Look up the class name in the names dictionary
-        class_name = results.names[int(cls)]
+        # Here you would process the frame data with the YOLO model
+        results_list = model(image_np)  
+        results = results_list[0]
 
-        # Append the result to the predictions list
-        predictions.append({
-            'object': idx + 1,
-            'class_name': class_name,
-            'box': box.tolist(),
-            'confidence': float(conf)
-        })
+        # Get the detected objects, their bounding boxes, and confidence scores
+        predictions = []
+        for idx, (box, conf, cls) in enumerate(zip(results.boxes.xyxy, results.boxes.conf, results.boxes.cls)):
+            # Look up the class name in the names dictionary
+            class_name = results.names[int(cls)]
 
-    # Convert the predictions to a JSON string
-    predictions_json = json.dumps(predictions)
+            # Append the result to the predictions list
+            predictions.append({
+                'object': idx + 1,
+                'class_name': class_name,
+                'box': box.tolist(),
+                'confidence': float(conf)
+            })
 
-    # Send the results back to the client
-    # conn.sendall(predictions_json.encode())
-    conn.sendall((predictions_json + '\n').encode())
+        # Convert the predictions to a JSON string
+        predictions_json = json.dumps(predictions)
 
-    # Close the connection
+        # Send the results back to the client
+        conn.sendall((predictions_json + '\n').encode())
+
+    # Close the connection when the loop exits
+    print(f"Closing connection from {addr}")
     conn.close()
+
 
 def main():
     LISTEN_ADDR = "0.0.0.0"
@@ -75,6 +80,8 @@ def main():
 
     # Set the SO_REUSEADDR flag
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
 
     # Bind the socket to a public host, and a port
     s.bind((LISTEN_ADDR, LISTEN_PORT))
@@ -88,7 +95,7 @@ def main():
         print(f"Got connection from {addr}")
 
         # Handle the client connection in a new thread
-        thread = threading.Thread(target=handle_client, args=(conn,))
+        thread = threading.Thread(target=handle_client, args=(conn, addr))
         thread.start()
 
 if __name__ == "__main__":

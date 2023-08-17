@@ -49,8 +49,8 @@ var Version string
 //go:embed assets/*
 var assetsFs embed.FS
 
-var everyNthFrame = 5          // Only process every Nth frame for object detection
-var interenceAvgInterval = 100 // Frames to average inference time over
+var everyNthFrame = 5         // Only process every Nth frame for object detection
+var interenceAvgInterval = 10 // Frames to average inference time over
 
 var stream *mjpeg.Stream
 
@@ -114,18 +114,26 @@ type StreamParams struct {
 	FPS    float64
 }
 
+type InferenceStats struct {
+	Avg float64
+	Min float64
+	Max float64
+}
+
 // TODO ADD MUTEX LOCK
 type RuntimeConfig struct {
 	MotionTriggeredLast time.Time `json:"motionTriggredLast"`
 	MotionTriggered     bool      `json:"motionTriggered"`
 	// MotionTriggeredChan chan bool `json:"motionTriggeredChan"`
 	// MotionHiRecOn bool `json:"motionHiRecOn"`
-	HiResControlChannel chan RecordMsg
-	MotionVideo         VideoMetadata
-	MotionMutex         *sync.Mutex
-	TextFont            *truetype.Font
-	LoResStreamParams   StreamParams
-	HiResStreamParams   StreamParams
+	HiResControlChannel   chan RecordMsg
+	MotionVideo           VideoMetadata
+	MotionMutex           *sync.Mutex
+	TextFont              *truetype.Font
+	LoResStreamParams     StreamParams
+	HiResStreamParams     StreamParams
+	objectPredictConn     net.Conn
+	InferenceTimingBuffer []InferenceStats
 }
 
 type IgnoreAreaClass struct {
@@ -321,7 +329,7 @@ func readConfig(path string) Config {
 
 func eventHandler(eventType string, payload []byte) {
 	// Log the event type
-	Log("event", fmt.Sprintf("Event: %s", eventType))
+	// Log("event", fmt.Sprintf("Event: %s", eventType))
 
 	// Webhook URL
 	if globalConfig.Events.Webhook != "" {
@@ -824,10 +832,12 @@ func main() {
 	// Start HI Res prebuffering
 	runtimeConfig.HiResControlChannel = make(chan RecordMsg)
 	go func() {
-		recordRTSPStream(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
-		defer close(runtimeConfig.HiResControlChannel)
-		time.Sleep(5 * time.Second)
-		Log("warning", "Restarting HI RTSP feed")
+		for {
+			recordRTSPStream(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
+			// defer close(runtimeConfig.HiResControlChannel)
+			time.Sleep(5 * time.Second)
+			Log("warning", "Restarting HI RTSP feed")
+		}
 	}()
 
 	frameChannel := make(chan FrameMsg)
@@ -841,11 +851,6 @@ func main() {
 		}
 	}(frameChannel)
 
-	// Calculate avg inference time
-	// Log every 100 frames everyNth as 5 thats 20 seconds
-	// var inferenceAvgTime float64
-	// var inferenceAvgCounter int
-	inferenceTimingLog := make([]float64, 0)
 	for msg := range frameChannel {
 		if msg.Error != "" {
 			Log("error", msg.Error)
@@ -861,7 +866,7 @@ func main() {
 			}
 
 			// Handle all motion stuff here
-			if runtimeConfig.MotionTriggered || (!runtimeConfig.MotionTriggered && CountChangedPixels(rgba, imgLast, uint8(30)) > int(globalConfig.ObjectAreaThreshold)) { // Use short-circuit to bypass pixel count if event is already triggered, otherwise we may not be able to identify all objects if motion is triggered
+			if runtimeConfig.MotionTriggered || (!runtimeConfig.MotionTriggered && CountChangedPixels(rgba, imgLast, uint8(30)) > int(globalConfig.PixelMotionAreaThreshold)) { // Use short-circuit to bypass pixel count if event is already triggered, otherwise we may not be able to identify all objects if motion is triggered
 				// If its been more than globalConfig.Motion.EventGap seconds since the last motion event, untrigger
 				if runtimeConfig.MotionTriggered && time.Since(runtimeConfig.MotionTriggeredLast) > time.Duration(globalConfig.Motion.EventGap)*time.Second {
 					// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtimeConfig.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
@@ -930,7 +935,7 @@ func main() {
 					}
 					eventJson, err := json.Marshal(eventRaw)
 					if err != nil {
-						Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+						Log("error", fmt.Sprintf("Error marshalling motion_ended event: %v", err))
 						return
 					}
 					eventHandler("motion_end", eventJson)
@@ -958,52 +963,7 @@ func main() {
 								return
 							}
 
-							// Calculate avg of all predict times for this run
-							inferenceSubAvg := make([]float64, 0)
-							for _, prediction := range predict {
-								inferenceSubAvg = append(inferenceSubAvg, prediction.Took)
-							}
-
-							// Calculate avg inference time
-							inferenceAvgTime := 0.0
-							for _, inferenceTime := range inferenceSubAvg {
-								inferenceAvgTime += inferenceTime
-							}
-							inferenceAvgTime = inferenceAvgTime / float64(len(inferenceSubAvg))
-
-							// Add to global inferenceTimingLog
-							inferenceTimingLog = append(inferenceTimingLog, inferenceAvgTime)
-
-							if len(inferenceTimingLog) > interenceAvgInterval {
-								// Calculate avg inference time
-								inferenceAvgTime = 0.0
-								for _, inferenceTime := range inferenceTimingLog {
-									inferenceAvgTime += inferenceTime
-								}
-								inferenceAvgTime = inferenceAvgTime / float64(len(inferenceTimingLog))
-
-								// Log avg inference time
-								type Event struct {
-									Type         string    `json:"type"`
-									Timestamp    time.Time `json:"timestamp"`
-									InferenceAvg float64   `json:"inference_avg"`
-								}
-
-								eventRaw := Event{
-									Type:         "inferencing_avg",
-									Timestamp:    time.Now(),
-									InferenceAvg: inferenceAvgTime,
-								}
-								eventJson, err := json.Marshal(eventRaw)
-								if err != nil {
-									Log("error", fmt.Sprintf("Error marshalling event: %v", err))
-									return
-								}
-								eventHandler("inference_avg", eventJson)
-
-								// Clear inferenceTimingLog
-								inferenceTimingLog = make([]float64, 0)
-							}
+							calcInferenceStats(predict) // Calculate inference stats
 
 							if len(predict) > 0 {
 								// Notify in realtime about detected objects
@@ -1020,7 +980,7 @@ func main() {
 								}
 								eventJson, err := json.Marshal(eventRaw)
 								if err != nil {
-									Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+									Log("error", fmt.Sprintf("Error marshalling object_predicted event: %v", err))
 									return
 								}
 								eventHandler("objects_detected", eventJson)
@@ -1134,7 +1094,7 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				}
 				eventJson, err := json.Marshal(eventRaw)
 				if err != nil {
-					Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+					Log("error", fmt.Sprintf("Error marshalling motion_started event: %v", err))
 					return
 				}
 				eventHandler("motion_start", eventJson)
@@ -1169,7 +1129,7 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				}
 				eventJson, err := json.Marshal(eventRaw)
 				if err != nil {
-					Log("error", fmt.Sprintf("Error marshalling event: %v", err))
+					Log("error", fmt.Sprintf("Error marshalling motion_update event: %v", err))
 					return
 				}
 				eventHandler("motion_update", eventJson)
@@ -1355,6 +1315,13 @@ func getClass(id int) string {
 	return classes[id]
 }
 
+func establishConnection() error {
+	d := net.Dialer{}
+	var err error
+	runtimeConfig.objectPredictConn, err = d.Dial("tcp", globalConfig.Motion.NetworkObjectDetectServer)
+	return err
+}
+
 func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	// Create a channel to communicate the result of the function
 	resultChan := make(chan []Prediction, 1)
@@ -1373,32 +1340,41 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 		}
 		imgData := buf.Bytes()
 
-		// Dial a TCP connection with context
-		d := net.Dialer{}
-		conn, err := d.Dial("tcp", globalConfig.Motion.NetworkObjectDetectServer)
-		if err != nil {
-			errorChan <- err
-			return
+		// Check if connection is nil and re-establish it if needed
+		if runtimeConfig.objectPredictConn == nil {
+			// Re-establish connection
+			if err := establishConnection(); err != nil {
+				errorChan <- err
+				return
+			}
 		}
-		defer conn.Close()
+
+		// Check if connection is broken and re-establish it if needed
+		if err := runtimeConfig.objectPredictConn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			// Re-establish connection
+			if err := establishConnection(); err != nil {
+				errorChan <- err
+				return
+			}
+		}
 
 		// Send the size of the image data
 		size := uint32(len(imgData))
 		sizeBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(sizeBytes, size)
-		if _, err := conn.Write(sizeBytes); err != nil {
+		if _, err := runtimeConfig.objectPredictConn.Write(sizeBytes); err != nil {
 			errorChan <- err
 			return
 		}
 
 		// Send the image data
-		if _, err := conn.Write(imgData); err != nil {
+		if _, err := runtimeConfig.objectPredictConn.Write(imgData); err != nil {
 			errorChan <- err
 			return
 		}
 
 		// Read the response
-		reader := bufio.NewReader(conn)
+		reader := bufio.NewReader(runtimeConfig.objectPredictConn)
 		respData, err := reader.ReadBytes('\n')
 		if err != nil {
 			errorChan <- err
@@ -1418,17 +1394,10 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 			preds[i].Bottom = int(box[3])
 			preds[i].Left = int(box[0])
 			preds[i].Right = int(box[2])
-
 			preds[i].Took = float64(time.Since(start).Milliseconds())
-
-			// if preds[i].ClassName != getClass(pred.Object) {
-			// 	Log("warning", fmt.Sprintf("Class mismatch for predicted object: %s != %s", preds[i].ClassName, getClass(pred.Object)))
-			// }
-			// preds[i].ClassName = getClass(pred.Object)
 		}
 
 		resultChan <- preds
-		// Log("info", fmt.Sprintf("TOOK: %v", time.Since(start)))
 	}()
 
 	// Wait for the result or the context timeout
@@ -1436,11 +1405,99 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	case result := <-resultChan:
 		return result, nil
 	case err := <-errorChan:
+		Log("debug", fmt.Sprintf("Error running objectPredict: %v", err))
 		return nil, err
-	case <-time.After(3 * time.Second):
+	case <-time.After(5 * time.Second):
 		return nil, errors.New("operation timed out")
 	}
 }
+
+// func objectPredict1(imgRaw image.Image) ([]Prediction, error) {
+// 	// Create a channel to communicate the result of the function
+// 	resultChan := make(chan []Prediction, 1)
+// 	errorChan := make(chan error, 1)
+
+// 	// Start the actual work in a goroutine
+// 	go func() {
+// 		// Start timer
+// 		start := time.Now()
+
+// 		// Convert the image to a byte array
+// 		buf := new(bytes.Buffer)
+// 		if err := jpeg.Encode(buf, imgRaw, nil); err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+// 		imgData := buf.Bytes()
+
+// 		// Dial a TCP connection with context
+// 		d := net.Dialer{}
+// 		conn, err := d.Dial("tcp", globalConfig.Motion.NetworkObjectDetectServer)
+// 		if err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+// 		defer conn.Close()
+
+// 		// Send the size of the image data
+// 		size := uint32(len(imgData))
+// 		sizeBytes := make([]byte, 4)
+// 		binary.BigEndian.PutUint32(sizeBytes, size)
+// 		if _, err := conn.Write(sizeBytes); err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+
+// 		// Send the image data
+// 		if _, err := conn.Write(imgData); err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+
+// 		// Read the response
+// 		reader := bufio.NewReader(conn)
+// 		respData, err := reader.ReadBytes('\n')
+// 		if err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+
+// 		// Parse the response data as a Prediction
+// 		var preds []Prediction
+// 		if err := json.Unmarshal(respData, &preds); err != nil {
+// 			errorChan <- err
+// 			return
+// 		}
+
+// 		for i, pred := range preds {
+// 			box := pred.Box
+// 			preds[i].Top = int(box[1])
+// 			preds[i].Bottom = int(box[3])
+// 			preds[i].Left = int(box[0])
+// 			preds[i].Right = int(box[2])
+
+// 			preds[i].Took = float64(time.Since(start).Milliseconds())
+
+// 			// if preds[i].ClassName != getClass(pred.Object) {
+// 			// 	Log("warning", fmt.Sprintf("Class mismatch for predicted object: %s != %s", preds[i].ClassName, getClass(pred.Object)))
+// 			// }
+// 			// preds[i].ClassName = getClass(pred.Object)
+// 		}
+
+// 		resultChan <- preds
+// 		// Log("info", fmt.Sprintf("TOOK: %v", time.Since(start)))
+// 	}()
+
+// 	// Wait for the result or the context timeout
+// 	select {
+// 	case result := <-resultChan:
+// 		return result, nil
+// 	case err := <-errorChan:
+// 		return nil, err
+// 	case <-time.After(3 * time.Second):
+// 		return nil, errors.New("operation timed out")
+// 	}
+// }
 
 func startObjectDetector(scriptPath string) {
 	basePath := filepath.Dir(scriptPath)
@@ -1763,4 +1820,120 @@ func sendToMQTT(topic string, message string, host string, port int, user string
 	}
 
 	return nil // Return nil if there were no errors
+}
+
+func calcInferenceStats(predict []Prediction) {
+	// Calculate avg of all predict times for this run
+	stats := InferenceStats{}
+	stats.Min = math.MaxFloat64
+	count := 0
+
+	if len(predict) == 0 {
+		return
+	}
+
+	// fmt.Printf("PREDICT LEN: %d\n", len(predict))
+	for _, prediction := range predict {
+		// fmt.Printf("TOOK: %f\n", prediction.Took)
+		if prediction.Took > float64(1000/everyNthFrame) {
+			Log("warning", fmt.Sprintf("Inference took %fms, max ceiling should be: %dms", prediction.Took, 1000/everyNthFrame))
+		}
+
+		if prediction.Took > stats.Max {
+			stats.Max = prediction.Took
+		}
+
+		if prediction.Took < stats.Min {
+			stats.Min = prediction.Took
+		}
+
+		stats.Avg += prediction.Took
+		count++
+	}
+
+	stats.Avg = stats.Avg / float64(count)
+	// fmt.Printf("AVG_PRE: %f COUNT: %f\n", stats.Avg, float64(count))
+
+	runtimeConfig.InferenceTimingBuffer = append(runtimeConfig.InferenceTimingBuffer, stats)
+	// fmt.Printf("ADDING_VALS: %v\n", stats)
+
+	// Check the entire buffer for NaN values
+	// for i, bufStats := range runtimeConfig.InferenceTimingBuffer {
+	// 	if math.IsNaN(bufStats.Avg) {
+	// 		fmt.Printf("FOUND NaN AT INDEX %d IN BUFFER: %v\n", i, bufStats)
+	// 	}
+	// }
+
+	if len(runtimeConfig.InferenceTimingBuffer) >= interenceAvgInterval {
+		statsFinal := InferenceStats{}
+		statsFinal.Min = math.MaxFloat64
+		statsFinal.Max = 0 // Initialize Max to 0
+		// Calculate avg inference time
+		for _, inferenceTime := range runtimeConfig.InferenceTimingBuffer {
+			// Check of any of the values are NaN and print which one is
+			// if math.IsNaN(inferenceTime.Avg) {
+			// 	Log("error", fmt.Sprintf("inferenceTime.Avg is NaN"))
+			// 	fmt.Printf("VALUE: %f\n", inferenceTime.Avg)
+			// }
+			// if math.IsNaN(inferenceTime.Min) {
+			// 	Log("error", fmt.Sprintf("inferenceTime.Min is NaN"))
+			// }
+			// if math.IsNaN(inferenceTime.Max) {
+			// 	Log("error", fmt.Sprintf("inferenceTime.Max is NaN"))
+			// }
+
+			statsFinal.Avg += inferenceTime.Avg
+			if inferenceTime.Min < statsFinal.Min {
+				statsFinal.Min = inferenceTime.Min
+			}
+
+			if inferenceTime.Max > statsFinal.Max {
+				statsFinal.Max = inferenceTime.Max
+			}
+		}
+
+		// fmt.Printf("AVG_B: %f LEN: %d\n", statsFinal.Avg, len(runtimeConfig.InferenceTimingBuffer))
+		statsFinal.Avg = statsFinal.Avg / float64(len(runtimeConfig.InferenceTimingBuffer))
+		// fmt.Printf("AVG_A: %f\n", statsFinal.Avg)
+
+		// Log avg inference time
+		type Event struct {
+			Type         string    `json:"type"`
+			Timestamp    time.Time `json:"timestamp"`
+			InferenceAvg float64   `json:"inference_avg"`
+			InferenceMin float64   `json:"inference_min"`
+			InferenceMax float64   `json:"inference_max"`
+			Ceiling      int       `json:"ceiling"`
+		}
+
+		eventRaw := Event{
+			Type:         "inferencing_avg",
+			Timestamp:    time.Now(),
+			InferenceAvg: statsFinal.Avg,
+			InferenceMin: statsFinal.Min,
+			InferenceMax: statsFinal.Max,
+			Ceiling:      1000 / everyNthFrame,
+		}
+		eventJson, err := json.Marshal(eventRaw)
+		if err != nil {
+			Log("error", fmt.Sprintf("Error marshalling inference_avg event: %v: Event: %v", err, eventRaw))
+			// If one of the values is NaN print which one it is
+			// if math.IsNaN(statsFinal.Avg) {
+			// 	Log("error", fmt.Sprintf("stats.Avg is NaN"))
+			// }
+			// if math.IsNaN(statsFinal.Min) {
+			// 	Log("error", fmt.Sprintf("stats.Min is NaN"))
+			// }
+			// if math.IsNaN(statsFinal.Max) {
+			// 	Log("error", fmt.Sprintf("stats.Max is NaN"))
+			// }
+
+			return
+		}
+		eventHandler("inference_avg", eventJson)
+		Log("notice", fmt.Sprintf("Inference avg: %fms, min: %fms, max: %fms", statsFinal.Avg, statsFinal.Min, statsFinal.Max))
+
+		// Clear inferenceTimingLog
+		runtimeConfig.InferenceTimingBuffer = make([]InferenceStats, 0)
+	}
 }

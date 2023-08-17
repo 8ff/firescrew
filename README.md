@@ -8,6 +8,11 @@
 [![Discord](https://img.shields.io/badge/Discord-Join%20Server-blue.svg?labelColor=757ef8&color=green)](https://discord.gg/CgB7nXqv6N)
 
 ```json
+*** New Release 17/Aug
+- Fixed ffprobe ftps parsing/Added resolution/fps bypass parameters
+- Docker image will now fetch latest binaries from github at runtime
+- Discord server has been added
+***
 *** New Release 16/Aug - Added ffprobe timeout/Fixed MQTT port in template/Added docs page  ***
 *** New Release 15/Aug - Added MQTT/Webhook/ScriptHook/Slack support!  ***
 ```

@@ -99,9 +99,11 @@ Help menu
 ```bash
 root@debian:~docker run --rm -it 8fforg/firescrew:latest -h
 Usage: firescrew [configfile]
-  -t, --template, t	Prints the template config to stdout
-  -h, --help, h		Prints this help message
-  -s, --serve, s	Starts the web server, requires: [path] [addr]
+  -t, --template, t     Prints the template config to stdout
+  -h, --help, h         Prints this help message
+  -s, --serve, s        Starts the web server, requires: [path] [addr]
+  -v, --version, v      Prints the version
+  -update, --update, update     Updates firescrew to the latest version
   ```
 
 ### Local
@@ -125,6 +127,16 @@ go run firescrew.go -s rec/hi :8080
 This will start a demo stream at `rtsp://localhost:8553/lo` and `rtsp://localhost:8554/hi`
 ```bash
 cd demoStream && ./startDemoStream.sh
+```
+
+## Command line options
+```bash
+Usage: firescrew [configfile]
+  -t, --template, t     Prints the template config to stdout
+  -h, --help, h         Prints this help message
+  -s, --serve, s        Starts the web server, requires: [path] [addr]
+  -v, --version, v      Prints the version
+  -update, --update, update     Updates firescrew to the latest version
 ```
 
 ## Dependencies Installation for YOLOv8

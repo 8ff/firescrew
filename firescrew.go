@@ -6,6 +6,7 @@ import (
 	"context"
 	"embed"
 	_ "net/http/pprof"
+	"runtime"
 
 	_ "embed"
 	"encoding/binary"
@@ -33,6 +34,7 @@ import (
 	"time"
 
 	"github.com/8ff/firescrew/pkg/firescrewServe"
+	"github.com/8ff/tuna"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/goki/freetype"
 	"github.com/goki/freetype/truetype"
@@ -102,7 +104,7 @@ type Config struct {
 }
 
 // TODO ADD MUTEX LOCK
-type Runtime struct {
+type RuntimeConfig struct {
 	MotionTriggeredLast time.Time `json:"motionTriggredLast"`
 	MotionTriggered     bool      `json:"motionTriggered"`
 	// MotionTriggeredChan chan bool `json:"motionTriggeredChan"`
@@ -165,7 +167,7 @@ type Event struct {
 
 var lastPositions = []TrackedObject{}
 var globalConfig Config
-var runtime Runtime
+var runtimeConfig RuntimeConfig
 
 var predictFrameCounter int
 
@@ -275,7 +277,7 @@ func readConfig(path string) Config {
 		os.Exit(1)
 	}
 
-	runtime.TextFont = font
+	runtimeConfig.TextFont = font
 
 	return config
 }
@@ -642,6 +644,8 @@ func main() {
 		fmt.Println("  -t, --template, t\tPrints the template config to stdout")
 		fmt.Println("  -h, --help, h\t\tPrints this help message")
 		fmt.Println("  -s, --serve, s\tStarts the web server, requires: [path] [addr]")
+		fmt.Println("  -v, --version, v\tPrints the version")
+		fmt.Println("  -update, --update, update\tUpdates firescrew to the latest version")
 		return
 	case "-s", "--serve", "s":
 		// This requires 2 more params, a path to files and an addr in form :8080
@@ -655,6 +659,20 @@ func main() {
 	case "-v", "--version", "v":
 		// Print version
 		fmt.Println(Version)
+		os.Exit(0)
+	case "-update", "--update", "update":
+		// Determine OS and ARCH
+		osRelease := runtime.GOOS
+		arch := runtime.GOARCH
+
+		// Build URL
+		e := tuna.SelfUpdate(fmt.Sprintf("https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch))
+		if e != nil {
+			fmt.Println(e)
+			os.Exit(1)
+		}
+
+		fmt.Println("Updated!")
 		os.Exit(0)
 	}
 
@@ -697,7 +715,7 @@ func main() {
 	Log("info", "*****************************************************")
 
 	// Define motion mutex
-	runtime.MotionMutex = &sync.Mutex{}
+	runtimeConfig.MotionMutex = &sync.Mutex{}
 
 	// Copy assets to local filesystem
 	path := copyAssetsToTemp()
@@ -730,10 +748,10 @@ func main() {
 	imgLast := image.NewRGBA(image.Rect(0, 0, loResStreamInfo.Streams[0].Width, loResStreamInfo.Streams[0].Height))
 
 	// Start HI Res prebuffering
-	runtime.HiResControlChannel = make(chan RecordMsg)
+	runtimeConfig.HiResControlChannel = make(chan RecordMsg)
 	go func() {
-		recordRTSPStream(globalConfig.HiResDeviceUrl, runtime.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
-		defer close(runtime.HiResControlChannel)
+		recordRTSPStream(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
+		defer close(runtimeConfig.HiResControlChannel)
 		time.Sleep(5 * time.Second)
 		Log("warning", "Restarting HI RTSP feed")
 	}()
@@ -767,18 +785,18 @@ func main() {
 			}
 
 			// Handle all motion stuff here
-			if runtime.MotionTriggered || (!runtime.MotionTriggered && CountChangedPixels(rgba, imgLast, uint8(30)) > int(globalConfig.ObjectAreaThreshold)) { // Use short-circuit to bypass pixel count if event is already triggered, otherwise we may not be able to identify all objects if motion is triggered
+			if runtimeConfig.MotionTriggered || (!runtimeConfig.MotionTriggered && CountChangedPixels(rgba, imgLast, uint8(30)) > int(globalConfig.ObjectAreaThreshold)) { // Use short-circuit to bypass pixel count if event is already triggered, otherwise we may not be able to identify all objects if motion is triggered
 				// If its been more than globalConfig.Motion.EventGap seconds since the last motion event, untrigger
-				if runtime.MotionTriggered && time.Since(runtime.MotionTriggeredLast) > time.Duration(globalConfig.Motion.EventGap)*time.Second {
-					// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtime.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
+				if runtimeConfig.MotionTriggered && time.Since(runtimeConfig.MotionTriggeredLast) > time.Duration(globalConfig.Motion.EventGap)*time.Second {
+					// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtimeConfig.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
 					Log("info", "MOTION_ENDED")
-					runtime.MotionMutex.Lock()
+					runtimeConfig.MotionMutex.Lock()
 					// Stop Hi res recording and dump json file as well as clear struct
-					runtime.MotionVideo.MotionEnd = time.Now()
-					runtime.HiResControlChannel <- RecordMsg{Record: false}
+					runtimeConfig.MotionVideo.MotionEnd = time.Now()
+					runtimeConfig.HiResControlChannel <- RecordMsg{Record: false}
 
 					if globalConfig.Video.RecodeTsToMp4 { // Store this for future reference
-						runtime.MotionVideo.RecodedToMp4 = true
+						runtimeConfig.MotionVideo.RecodedToMp4 = true
 						go func(videoFile string) {
 							// Recode the ts file to mp4
 							_, err := recodeToMP4(videoFile)
@@ -791,15 +809,15 @@ func main() {
 									Log("error", fmt.Sprintf("Error removing ts file: %v", err))
 								}
 							}
-						}(filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile))
+						}(filepath.Join(globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.VideoFile))
 					}
 
-					jsonData, err := json.Marshal(runtime.MotionVideo)
+					jsonData, err := json.Marshal(runtimeConfig.MotionVideo)
 					if err != nil {
 						Log("error", fmt.Sprintf("Error marshalling metadata: %v", err))
 					}
 
-					err = os.WriteFile(filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtime.MotionVideo.ID)), jsonData, 0644)
+					err = os.WriteFile(filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)), jsonData, 0644)
 					if err != nil {
 						Log("error", fmt.Sprintf("Error writing metadata file: %v", err))
 					}
@@ -823,16 +841,16 @@ func main() {
 					eventRaw := Event{
 						Type:                "motion_ended",
 						Timestamp:           time.Now(),
-						MotionTriggeredLast: runtime.MotionTriggeredLast,
-						ID:                  runtime.MotionVideo.ID,
-						MotionStart:         runtime.MotionVideo.MotionStart,
-						MotionEnd:           runtime.MotionVideo.MotionEnd,
-						Objects:             runtime.MotionVideo.Objects,
-						RecodedToMp4:        runtime.MotionVideo.RecodedToMp4,
-						Snapshots:           runtime.MotionVideo.Snapshots,
-						VideoFile:           runtime.MotionVideo.VideoFile,
-						CameraName:          runtime.MotionVideo.CameraName,
-						MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtime.MotionVideo.ID)),
+						MotionTriggeredLast: runtimeConfig.MotionTriggeredLast,
+						ID:                  runtimeConfig.MotionVideo.ID,
+						MotionStart:         runtimeConfig.MotionVideo.MotionStart,
+						MotionEnd:           runtimeConfig.MotionVideo.MotionEnd,
+						Objects:             runtimeConfig.MotionVideo.Objects,
+						RecodedToMp4:        runtimeConfig.MotionVideo.RecodedToMp4,
+						Snapshots:           runtimeConfig.MotionVideo.Snapshots,
+						VideoFile:           runtimeConfig.MotionVideo.VideoFile,
+						CameraName:          runtimeConfig.MotionVideo.CameraName,
+						MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)),
 					}
 					eventJson, err := json.Marshal(eventRaw)
 					if err != nil {
@@ -841,11 +859,11 @@ func main() {
 					}
 					eventHandler("motion_end", eventJson)
 
-					// 	// Clear the whole runtime.MotionVideo struct
-					runtime.MotionVideo = VideoMetadata{}
+					// 	// Clear the whole runtimeConfig.MotionVideo struct
+					runtimeConfig.MotionVideo = VideoMetadata{}
 
-					runtime.MotionTriggered = false
-					runtime.MotionMutex.Unlock()
+					runtimeConfig.MotionTriggered = false
+					runtimeConfig.MotionMutex.Unlock()
 				}
 
 				if globalConfig.Motion.NetworkObjectDetectServer != "" {
@@ -958,18 +976,18 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 			}
 
 			Log("info", fmt.Sprintf("TRIGGERED NEW OBJECT @ %d|%f [%s|%f]", object.Center, object.Area, object.Class, object.Confidence))
-			if !runtime.MotionTriggered {
+			if !runtimeConfig.MotionTriggered {
 				// Lock mutex
-				runtime.MotionMutex.Lock()
-				runtime.MotionTriggered = true
-				runtime.MotionTriggeredLast = now
-				runtime.MotionVideo.CameraName = globalConfig.CameraName
-				runtime.MotionVideo.MotionStart = now
-				// Generate random string filename for runtime.MotionVideo.Filename
-				runtime.MotionVideo.ID = generateRandomString(15)
-				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
-				runtime.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtime.MotionVideo.ID)                                                            // Set filename for video file
-				runtime.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtime.MotionVideo.VideoFile)} // Start recording
+				runtimeConfig.MotionMutex.Lock()
+				runtimeConfig.MotionTriggered = true
+				runtimeConfig.MotionTriggeredLast = now
+				runtimeConfig.MotionVideo.CameraName = globalConfig.CameraName
+				runtimeConfig.MotionVideo.MotionStart = now
+				// Generate random string filename for runtimeConfig.MotionVideo.Filename
+				runtimeConfig.MotionVideo.ID = generateRandomString(15)
+				runtimeConfig.MotionVideo.Objects = append(runtimeConfig.MotionVideo.Objects, object)
+				runtimeConfig.MotionVideo.VideoFile = fmt.Sprintf("clip_%s.ts", runtimeConfig.MotionVideo.ID)                                                            // Set filename for video file
+				runtimeConfig.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.VideoFile)} // Start recording
 
 				// Notify in realtime about detected objects
 				type Event struct {
@@ -986,10 +1004,10 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 					Type:                "motion_started",
 					Timestamp:           time.Now(),
 					MotionTriggeredLast: time.Now(),
-					ID:                  runtime.MotionVideo.ID,
-					MotionStart:         runtime.MotionVideo.MotionStart,
-					Objects:             runtime.MotionVideo.Objects,
-					CameraName:          runtime.MotionVideo.CameraName,
+					ID:                  runtimeConfig.MotionVideo.ID,
+					MotionStart:         runtimeConfig.MotionVideo.MotionStart,
+					Objects:             runtimeConfig.MotionVideo.Objects,
+					CameraName:          runtimeConfig.MotionVideo.CameraName,
 				}
 				eventJson, err := json.Marshal(eventRaw)
 				if err != nil {
@@ -999,12 +1017,12 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				eventHandler("motion_start", eventJson)
 
 				// Unlock mutex
-				runtime.MotionMutex.Unlock()
+				runtimeConfig.MotionMutex.Unlock()
 			} else {
 				// Lock mutex
-				runtime.MotionMutex.Lock()
-				runtime.MotionTriggeredLast = now
-				runtime.MotionVideo.Objects = append(runtime.MotionVideo.Objects, object)
+				runtimeConfig.MotionMutex.Lock()
+				runtimeConfig.MotionTriggeredLast = now
+				runtimeConfig.MotionVideo.Objects = append(runtimeConfig.MotionVideo.Objects, object)
 
 				// Notify in realtime about detected objects
 				type Event struct {
@@ -1021,10 +1039,10 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 					Type:                "motion_update",
 					Timestamp:           time.Now(),
 					MotionTriggeredLast: time.Now(),
-					ID:                  runtime.MotionVideo.ID,
-					MotionStart:         runtime.MotionVideo.MotionStart,
-					Objects:             runtime.MotionVideo.Objects,
-					CameraName:          runtime.MotionVideo.CameraName,
+					ID:                  runtimeConfig.MotionVideo.ID,
+					MotionStart:         runtimeConfig.MotionVideo.MotionStart,
+					Objects:             runtimeConfig.MotionVideo.Objects,
+					CameraName:          runtimeConfig.MotionVideo.CameraName,
 				}
 				eventJson, err := json.Marshal(eventRaw)
 				if err != nil {
@@ -1034,10 +1052,10 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 				eventHandler("motion_update", eventJson)
 
 				// Unlock mutex
-				runtime.MotionMutex.Unlock()
+				runtimeConfig.MotionMutex.Unlock()
 			}
 
-			// Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtime.MotionVideo.Objects)))
+			// Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtimeConfig.MotionVideo.Objects)))
 
 			drawRectangle(frame, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
 
@@ -1048,12 +1066,12 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 			addLabelWithTTF(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
 
 			// Store snapshot of the object
-			if runtime.MotionVideo.ID != "" {
-				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtime.MotionVideo.ID, generateRandomString(4))
-				runtime.MotionVideo.Snapshots = append(runtime.MotionVideo.Snapshots, snapshotFilename)
+			if runtimeConfig.MotionVideo.ID != "" {
+				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtimeConfig.MotionVideo.ID, generateRandomString(4))
+				runtimeConfig.MotionVideo.Snapshots = append(runtimeConfig.MotionVideo.Snapshots, snapshotFilename)
 				saveJPEG(filepath.Join(globalConfig.Video.HiResPath, snapshotFilename), frame, 100)
 			} else {
-				Log("warning", "runtime.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
+				Log("warning", "runtimeConfig.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
 			}
 		}
 	}
@@ -1517,7 +1535,7 @@ func addLabelWithTTF(img draw.Image, text string, pt image.Point, textColor colo
 	// Set up the freetype context to draw the text
 	c := freetype.NewContext()
 	c.SetDPI(72)
-	c.SetFont(runtime.TextFont)
+	c.SetFont(runtimeConfig.TextFont)
 	c.SetFontSize(fontSize)
 	c.SetClip(img.Bounds())
 	c.SetDst(img)

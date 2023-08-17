@@ -1,3 +1,5 @@
+github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674 h1:9L0K8szFUXJ0V71/I5YJeCmOXVhgU0+v0+9nf8mHqG0=
+github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674/go.mod h1:brULTDkAKe2Ut39W20RPVcc0M6MhaHLTS/oGJiC5tVs=
 github.com/asticode/go-astikit v0.30.0 h1:DkBkRQRIxYcknlaU7W7ksNfn4gMFsB0tqMJflxkRsZA=
 github.com/asticode/go-astikit v0.30.0/go.mod h1:h4ly7idim1tNhaVkdVBeXQZEE3L0xblP7fCWbgwipF0=
 github.com/asticode/go-astits v1.13.0 h1:XOgkaadfZODnyZRR5Y0/DWkA9vrkLLPLeeOvDwfKZ1c=

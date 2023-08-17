@@ -3,6 +3,7 @@ module github.com/8ff/firescrew
 go 1.20
 
 require (
+	github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674
 	github.com/asticode/go-astits v1.13.0
 	github.com/bluenviron/gortsplib/v3 v3.10.0
 	github.com/bluenviron/mediacommon v1.0.0

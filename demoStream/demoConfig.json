@@ -26,7 +26,7 @@
     },
     "pixelMotionAreaThreshold": 50.00,
     "objectCenterMovementThreshold": 50.0,
-    "objectAreaThreshold": 300.0,
+    "objectAreaThreshold": 1000.0,
     "ignoreAreasClasses": [
         {"class": ["template"], "coordinates": "0,0,0,0"}
     ],

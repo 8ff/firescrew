@@ -19,15 +19,14 @@ esac
 BINARY_PATH="/bins/firescrew.linux.${BINARY_ARCH}"
 RTSP_SERVER_BINARY_PATH="/bins/rtspServer.linux.${BINARY_ARCH}"
 
-if [ ! -f $BINARY_PATH ]; then
+if [ ! -f "$BINARY_PATH" ]; then
   echo "Binary not found for Architecture: $ARCH"
   exit 1
 fi
 
-
 # Check if there is a new version of the binary available
 echo "[+] Checking for updates..."
-exec ${BINARY_PATH} update
+${BINARY_PATH} update
 
 # Check if the first and only parameter is "demo"
 if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
@@ -37,12 +36,11 @@ if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
   git clone https://github.com/8ff/firescrew 2>/dev/null || fail "Failed to clone demo repository"
   cd firescrew/demoStream || fail "Failed to change directory to demoStream"
 
-
   echo "[+] [1/5] Spinning up RTSP reflectors..."
   # Start the RTSP servers and save their PIDs
-  exec $RTSP_SERVER_BINARY_PATH :8553 >/pid1.log 2>&1 || fail "Failed to start RTSP server" &
+  $RTSP_SERVER_BINARY_PATH :8553 >/pid1.log 2>&1 || fail "Failed to start RTSP server" &
   PID1=$!
-  exec $RTSP_SERVER_BINARY_PATH :8554 >/pid2.log 2>&1 || fail "Failed to start RTSP server" &
+  $RTSP_SERVER_BINARY_PATH :8554 >/pid2.log 2>&1 || fail "Failed to start RTSP server" &
   PID2=$!
 
   echo "[+] [2/5] Downloading sample video..."
@@ -57,31 +55,30 @@ if [ "$#" -eq 1 ] && [ "$1" = "demo" ]; then
   sleep 1
 
   echo "[+] [4/5] Starting motion detection..."
-  exec nohup $BINARY_PATH ./demoConfig.json >/pid4.log 2>&1|| fail "Failed to start firescrew" &
+  nohup "$BINARY_PATH" ./demoConfig.json >/pid4.log 2>&1|| fail "Failed to start firescrew" &
   PID4=$!
 
   echo "[+] [5/5] Spinning up WebUI..."
-  exec $BINARY_PATH -s rec/hi :8080 1>/pid5.log 2>&1 || fail "Failed to serve WebUI" &
+  $BINARY_PATH -s rec/hi :8080 1>/pid5.log 2>&1 || fail "Failed to serve WebUI" &
   PID5=$!
 
   echo "[+] Waiting for everything to come up..."
-# Wait until port 8080 is open and print a message
+  # Wait until port 8080 is open and print a message
   while ! nc -z localhost 8080 1>/dev/null 2>&1; do sleep 1; done
   echo "[+] Lift off!"
   echo "*** Please note that demo mode uses significantly more cpu as rtsp streams are being simulated ***"
 
+  # Function to kill the RTSP servers when the script exits
+  cleanup() {
+    kill -9 "$PID1" "$PID2" "$PID3" "$PID4" "$PID5"
+  }
+
+  # Trap the EXIT signal and call the cleanup function
+  trap cleanup EXIT
+
   # Block here
   while true; do sleep 1; done
 
-# Function to kill the RTSP servers when the script exits
-cleanup() {
-  kill -9 $PID1 $PID2 $PID3 $PID4 $PID5
-}
-
-# Trap the EXIT signal and call the cleanup function
-trap cleanup EXIT
-
-
 else
-  exec $BINARY_PATH "$@"
+  $BINARY_PATH "$@"
 fi

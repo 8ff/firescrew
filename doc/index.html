@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Firescrew Docs">
+  <meta name="keywords" content="Firescrew, docs">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Firescrew Docs</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link id="dynamic-css" rel="stylesheet" href="css/desktop.css">
+  <link rel="stylesheet" href="css/common.css">
+</head>
+
+<body>
+  <div class="contentWrapper">
+    <object type="image/svg+xml" data="svg/desktop.svg" class="background"></object>
+    <div class="linkDocsHeader" onclick="window.location.href='https://github.com/8ff/'"></div>
+    <div class="linkQuickStart" onclick="window.location.href='https://github.com/8ff/firescrew'"></div>
+    <div class="linkDocker" onclick="window.open('https://github.com/8ff/firescrew')"></div>
+    <div class="codeArea">
+      <h1># Docker demo</h1>
+      <pre><code>docker run --rm -it -p 8080:8080 8fforg/firescrew:latest demo</code></pre>
+      <h4 class="notice"> Point your browser to http://localhost:8080</h4>
+      <br>
+      <h1># Steps for setting up a camera</h1>
+      <h3 class="noMarginTop">1. Generate template config</h3>
+      <pre><code>docker run --rm -it 8fforg/firescrew:latest -t > config.json</code></pre>
+      <h4 class="notice">Now edit the <span class="highlight">config.json</span> to set at minimum <span class="highlight">deviceUrl</span> and <span class="highlight">hiResDeviceUrl</span></h4>
+      <h3>2. Start object detection</h3>
+      <pre><code>docker run --rm -v $(pwd)/media:/media -v $(pwd)/config.json:/config.json -it 8fforg/firescrew:latest /config.json</code></pre>
+      <h4 class="notice">This will start firescrew with the options defined in the config and store all events to <span class="highlight">./media</span> folder</h4>
+      <h3>3. Spin up WebUI</h3>
+      <pre><code>docker run --rm -p8080:8080 -it -v $(pwd)/media:/media 8fforg/firescrew:latest -s /media :8080</code></pre>
+      <h4 class="notice">You can now point your browser to <span class="highlight"><a href class="no-blue-link">http://localhost:8080</a></span></h4>
+      <h4>* To spin up more cameras just repeat step <span class="highlight">#2</span>, WebUI is designed to handle unlimited amount of cameras.</h5>
+      <h3>Using Object detection with Coral TPU</h3>
+      <pre><code>lsusb | grep Google</code></pre>
+      <h4 class="notice">Take <span class="highlight">Bus</span> and <span class="highlight">Device</span> from the output of the above command and replace <span class="highlight">[bus]</span> and <span class="highlight">[device]</span> in the below command</h4>
+      <pre><code>docker run -d --device=/dev/bus/usb/[bus]/[device] -v config.json:config.json 8fforg/firescrew:latest</code></pre>
+    </div>
+  </div>
+  <script src="js/main.js"></script>
+</body>
+
+</html>

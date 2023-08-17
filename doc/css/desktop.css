@@ -1,0 +1,75 @@
+html {
+    background-color: #0e1117;
+    margin: 0;
+}
+
+body {
+    margin: 0;
+}
+
+.background {
+    position: relative;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+}
+
+
+.contentWrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+#selection {
+    position: absolute;
+    background-color: rgba(255, 0, 0, 0.5);
+    /* Red with transparency */
+    border: 1px dashed rgb(79, 210, 23);
+}
+
+/****** LINKS ********/
+.linkDocsHeader {
+        position: absolute;
+        top: 0;
+        left: 0;
+        margin-top: 3.59%;
+        margin-left: 3.30%;
+        width: 18.97%;
+        height: 3.64%;
+}
+
+/* .linkQuickStart {
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin-top: 15.95%;
+    margin-left: 2.08%;
+    width: 9.55%;
+    height: 1.03%;
+}
+
+.linkDocker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin-top: 18.54%;
+    margin-left: 2.08%;
+    width: 5.88%;
+    height: 0.96%;
+} */
+
+.codeArea {
+    display: block !important;
+    padding: 5%;
+    border-radius: 10px;
+    background-color: #1b1e24;
+    position: absolute;
+    top: 0;
+    left: 50%; /* Move it to the center horizontally */
+    transform: translateX(-50%); /* Shift it back by half its width */
+    margin-top: 20%;
+    width: 85%;
+    /* height: 83%; */
+  }
+  

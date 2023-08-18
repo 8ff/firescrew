@@ -91,6 +91,7 @@ type Config struct {
 	Video struct {
 		HiResPath     string `json:"hiResPath"`
 		RecodeTsToMp4 bool   `json:"recodeTsToMp4"`
+		OnlyRemuxMp4  bool   `json:"onlyRemuxMp4"`
 	} `json:"video"`
 	Events struct {
 		Mqtt struct {
@@ -284,6 +285,7 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Hi-Res Device URL: %s", config.HiResDeviceUrl))
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
+	Log("info", fmt.Sprintf("Video OnlyRemuxMp4: %t", config.Video.OnlyRemuxMp4))
 	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
 	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ConfidenceMinThreshold))
 	Log("info", fmt.Sprintf("Motion LookForClasses: %v", config.Motion.LookForClasses))
@@ -643,8 +645,13 @@ func recodeToMP4(inputFile string) (string, error) {
 	// Remove the .ts extension and replace it with .mp4
 	outputFile := strings.TrimSuffix(inputFile, ".ts") + ".mp4"
 
+	var cmd *exec.Cmd
 	// Create the FFmpeg command
-	cmd := exec.Command("ffmpeg", "-i", inputFile, "-c:v", "libx264", "-c:a", "aac", outputFile)
+	if globalConfig.Video.OnlyRemuxMp4 {
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c", "copy", outputFile)
+	} else {
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:v", "libx264", "-c:a", "aac", outputFile)
+	}
 
 	// Capture the standard output and standard error
 	output, err := cmd.CombinedOutput()

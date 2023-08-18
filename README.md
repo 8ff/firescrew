@@ -203,13 +203,13 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
     "printDebug": false, // If true, debug information will be printed.
     "video": {
         "hiResPath": "", // Path where high-resolution videos are stored.
-        "recodeTsToMp4": true // To lower cpu usage, HI res clips are stored in original format, in order to play these clips in every browser, set this to true. After every event end, clips will be recoded to mp4.
-
+        "recodeTsToMp4": true, // To lower cpu usage, HI res clips are stored in original format, in order to play these clips in every browser, set this to true. After every event end, clips will be recoded to mp4.
+        "onlyRemuxMp4": true // Instead of doing re-encode, it will only remux the .mp4. This saves cpu usage and should work for most. If you are unable to play the videos in the browser, set this to false.
     },
     "motion": {
         "confidenceMinThreshold": 0.3, // Minimum threshold for object detection. Range: 0.0 - 1
         "lookForClasses": [], // Array of classes that the model should look for. Typically: ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"]
-        "embeddedObjectScript": "objectDetectServerYolo.py", // Options are objectDetectServerYolo.py (YOLOV8) or objectDetectServerCoral.py (EdgeTPU Coral TPU)
+        "embeddedObjectScript": "objectDetectServerYolo.py", // Options are objectDetectServerYolo.py (YOLOV8), objectDetectServerCoral.py (EdgeTPU Coral TPU)
         "networkObjectDetectServer": "", // Address of the network object detection server.
         "prebufferSeconds": 10, // Number of seconds to prebuffer before the motion event.
         "eventGap": 30 // Gap between events in seconds.

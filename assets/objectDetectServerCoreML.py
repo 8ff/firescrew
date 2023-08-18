@@ -103,14 +103,32 @@ class_labels = {
     89: 'toothbrush',
 }
 
-def load_image(data, resize_to=None):
+def load_image(data, target_size=(640, 640)):
     img = PIL.Image.open(io.BytesIO(data))
-    if resize_to is not None:
-        img_resized = PIL.Image.new('RGB', resize_to)
-        img_resized.paste(img, (0, (resize_to[1] - img.size[1]) // 2))
-        img = img_resized
-    img_np = np.array(img).astype(np.float32)
-    return img_np, img
+    img_aspect = img.width / img.height
+    target_aspect = target_size[0] / target_size[1]
+
+    # Resize the image to maintain aspect ratio
+    if img_aspect > target_aspect:
+        new_width = target_size[0]
+        new_height = int(new_width / img_aspect)
+    else:
+        new_height = target_size[1]
+        new_width = int(new_height * img_aspect)
+
+    img_resized = img.resize((new_width, new_height))
+
+    # Create a new blank image with the target size
+    final_img = PIL.Image.new('RGB', target_size)
+
+    # Compute the padding required in each dimension
+    x_padding = (target_size[0] - new_width) // 2
+    y_padding = (target_size[1] - new_height) // 2
+
+    # Paste the resized image into the blank image, centered
+    final_img.paste(img_resized, (x_padding, y_padding))
+
+    return final_img  # Return the PIL Image object
 
 
 def recvall(sock, count):
@@ -133,11 +151,16 @@ def handle_client(conn):
             if frame_data is None:
                 break
 
-            # Load and resize the image
-            img_np, img_resized = load_image(frame_data, resize_to=(640, 640))
+            # Load and resize the image (now returning a PIL Image object)
+            img_resized = load_image(frame_data)
 
             # Run the model
-            out_dict = model.predict({'image': img_resized})
+            out_dict = model.predict({'image': img_resized})  # Pass the PIL Image object
+
+           # Check if the 'confidence' array has elements
+            if out_dict['confidence'].shape[0] == 0:
+                print("No objects detected")
+                continue  # Skip to the next iteration if no objects are detected
 
             # Extract the results
             predictions = []

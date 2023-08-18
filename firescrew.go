@@ -749,7 +749,7 @@ func main() {
 			if stream.CodecType == "video" {
 				streamIndex = index
 				if globalConfig.Video.OnlyRemuxMp4 {
-					if stream.CodecName != "h264" && stream.CodecName != "h265" {
+					if stream.CodecName != "h264" {
 						Log("warning", fmt.Sprintf("OnlyRemuxMp4 is enabled but the stream codec is not h264 or h265. Your videos may not play in WebUI. Codec: %s", stream.CodecName))
 					}
 				}

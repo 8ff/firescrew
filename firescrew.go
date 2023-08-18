@@ -210,6 +210,7 @@ type StreamInfo struct {
 		Width      int     `json:"width"`
 		Height     int     `json:"height"`
 		CodecType  string  `json:"codec_type"`
+		CodecName  string  `json:"codec_name"`
 		RFrameRate float64 `json:"-"`
 	} `json:"streams"`
 }
@@ -428,6 +429,7 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 			Width      int    `json:"width"`
 			Height     int    `json:"height"`
 			CodecType  string `json:"codec_type"`
+			CodecName  string `json:"codec_name"`
 			RFrameRate string `json:"r_frame_rate"`
 		} `json:"streams"`
 	}
@@ -453,11 +455,13 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 				Width      int     `json:"width"`
 				Height     int     `json:"height"`
 				CodecType  string  `json:"codec_type"`
+				CodecName  string  `json:"codec_name"`
 				RFrameRate float64 `json:"-"`
 			}{
 				Width:      stream.Width,
 				Height:     stream.Height,
 				CodecType:  stream.CodecType,
+				CodecName:  stream.CodecName,
 				RFrameRate: frameRate,
 			})
 		}
@@ -744,6 +748,11 @@ func main() {
 		for index, stream := range hiResStreamInfo.Streams {
 			if stream.CodecType == "video" {
 				streamIndex = index
+				if globalConfig.Video.OnlyRemuxMp4 {
+					if stream.CodecName != "h264" && stream.CodecName != "h265" {
+						Log("warning", fmt.Sprintf("OnlyRemuxMp4 is enabled but the stream codec is not h264 or h265. Your videos may not play in WebUI. Codec: %s", stream.CodecName))
+					}
+				}
 				break
 			}
 		}

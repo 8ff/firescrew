@@ -270,7 +270,7 @@ func readConfig(path string) Config {
 		os.Exit(1)
 	}
 
-	if config.Motion.EmbeddedObjectScript != "objectDetectServerYolo.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoral.py" {
+	if config.Motion.EmbeddedObjectScript != "objectDetectServerYolo.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoral.py" && config.Motion.EmbeddedObjectScript != "objectDetectServerCoreML.py" {
 		Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("embeddedObjectScript must be either objectDetectServerYolo.py or objectDetectServerCoral.py")))
 		os.Exit(1)
 	}
@@ -807,7 +807,7 @@ func main() {
 		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
 		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 		// Set networkObjectDetectServer path to 127.0.0.1:8555
-		// time.Sleep(5 * time.Second)
+		time.Sleep(5 * time.Second) // Give time to kill old instance if still running
 		// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
 		for {
 			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 10*time.Second)
@@ -816,6 +816,7 @@ func main() {
 				time.Sleep(1 * time.Second)
 				continue
 			}
+			Log("notice", "Object detection server connected")
 			conn.Close()
 			break
 		}
@@ -1381,6 +1382,8 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 			return
 		}
 
+		// fmt.Printf("RAW: %s\n", respData)
+
 		// Parse the response data as a Prediction
 		var preds []Prediction
 		if err := json.Unmarshal(respData, &preds); err != nil {
@@ -1412,90 +1415,84 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	}
 }
 
-// func objectPredict1(imgRaw image.Image) ([]Prediction, error) {
-// 	// Create a channel to communicate the result of the function
-// 	resultChan := make(chan []Prediction, 1)
-// 	errorChan := make(chan error, 1)
+// func startObjectDetector(scriptPath string) {
+// 	basePath := filepath.Dir(scriptPath)
+// 	restartCount := 0
+// 	pidFileName := filepath.Base(scriptPath) + ".pid"
+// 	pidFilePath := filepath.Join("/tmp", pidFileName)
 
-// 	// Start the actual work in a goroutine
-// 	go func() {
-// 		// Start timer
-// 		start := time.Now()
-
-// 		// Convert the image to a byte array
-// 		buf := new(bytes.Buffer)
-// 		if err := jpeg.Encode(buf, imgRaw, nil); err != nil {
-// 			errorChan <- err
-// 			return
+// 	// Try to read existing PID file
+// 	pidData, err := os.ReadFile(pidFilePath)
+// 	if err == nil {
+// 		pid, err := strconv.Atoi(string(pidData))
+// 		if err == nil {
+// 			process, err := os.FindProcess(pid)
+// 			if err == nil {
+// 				process.Kill() // Try to kill the existing process
+// 			}
 // 		}
-// 		imgData := buf.Bytes()
+// 	}
 
-// 		// Dial a TCP connection with context
-// 		d := net.Dialer{}
-// 		conn, err := d.Dial("tcp", globalConfig.Motion.NetworkObjectDetectServer)
+// 	for {
+// 		if restartCount > 3 {
+// 			Log("error", "Embedded python script failed 3 times, giving up")
+// 			os.Exit(1)
+// 		}
+
+// 		cmd := exec.Command("python3", "-u", scriptPath)
+// 		cmd.Dir = basePath
+
+// 		stdout, err := cmd.StdoutPipe()
 // 		if err != nil {
-// 			errorChan <- err
-// 			return
-// 		}
-// 		defer conn.Close()
-
-// 		// Send the size of the image data
-// 		size := uint32(len(imgData))
-// 		sizeBytes := make([]byte, 4)
-// 		binary.BigEndian.PutUint32(sizeBytes, size)
-// 		if _, err := conn.Write(sizeBytes); err != nil {
-// 			errorChan <- err
-// 			return
+// 			Log("error", fmt.Sprintf("Error creating StdoutPipe for Cmd: %v", err))
+// 			continue
 // 		}
 
-// 		// Send the image data
-// 		if _, err := conn.Write(imgData); err != nil {
-// 			errorChan <- err
-// 			return
-// 		}
+// 		var stderr bytes.Buffer
+// 		cmd.Stderr = &stderr
 
-// 		// Read the response
-// 		reader := bufio.NewReader(conn)
-// 		respData, err := reader.ReadBytes('\n')
+// 		Log("info", "Starting embedded python object server")
+// 		err = cmd.Start()
+
 // 		if err != nil {
-// 			errorChan <- err
-// 			return
+// 			Log("error", fmt.Sprintf("Error starting Cmd: %v", err))
+// 			continue
 // 		}
 
-// 		// Parse the response data as a Prediction
-// 		var preds []Prediction
-// 		if err := json.Unmarshal(respData, &preds); err != nil {
-// 			errorChan <- err
-// 			return
+// 		// Write PID to file
+// 		err = os.WriteFile(pidFilePath, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
+// 		if err != nil {
+// 			Log("error", fmt.Sprintf("Error writing PID to file: %v", err))
+// 			cmd.Process.Kill()
+// 			continue
 // 		}
 
-// 		for i, pred := range preds {
-// 			box := pred.Box
-// 			preds[i].Top = int(box[1])
-// 			preds[i].Bottom = int(box[3])
-// 			preds[i].Left = int(box[0])
-// 			preds[i].Right = int(box[2])
+// 		go readOutput(stdout)
 
-// 			preds[i].Took = float64(time.Since(start).Milliseconds())
+// 		// Create a channel to catch signals to the process
+// 		c := make(chan os.Signal, 1)
+// 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+// 		go func() {
+// 			<-c
+// 			if cmd.Process != nil {
+// 				cmd.Process.Kill()
+// 			}
+// 			os.Remove(pidFilePath) // Remove PID file
+// 			os.Exit(1)
+// 		}()
 
-// 			// if preds[i].ClassName != getClass(pred.Object) {
-// 			// 	Log("warning", fmt.Sprintf("Class mismatch for predicted object: %s != %s", preds[i].ClassName, getClass(pred.Object)))
-// 			// }
-// 			// preds[i].ClassName = getClass(pred.Object)
+// 		err = cmd.Wait()
+
+// 		if err != nil {
+// 			Log("error", fmt.Sprintf("Embedded python script failed: %s", stderr.String()))
+// 		} else {
+// 			Log("info", "Embedded python script exited, restarting...")
 // 		}
 
-// 		resultChan <- preds
-// 		// Log("info", fmt.Sprintf("TOOK: %v", time.Since(start)))
-// 	}()
+// 		os.Remove(pidFilePath) // Remove PID file
 
-// 	// Wait for the result or the context timeout
-// 	select {
-// 	case result := <-resultChan:
-// 		return result, nil
-// 	case err := <-errorChan:
-// 		return nil, err
-// 	case <-time.After(3 * time.Second):
-// 		return nil, errors.New("operation timed out")
+// 		time.Sleep(2 * time.Second)
+// 		restartCount++
 // 	}
 // }
 
@@ -1504,6 +1501,27 @@ func startObjectDetector(scriptPath string) {
 	restartCount := 0
 	pidFileName := filepath.Base(scriptPath) + ".pid"
 	pidFilePath := filepath.Join("/tmp", pidFileName)
+
+	// Read the first line of the script to get the shebang
+	file, err := os.Open(scriptPath)
+	if err != nil {
+		Log("error", fmt.Sprintf("Error opening script: %v", err))
+		return
+	}
+	reader := bufio.NewReader(file)
+	shebang, err := reader.ReadString('\n')
+	file.Close()
+	if err != nil {
+		Log("error", fmt.Sprintf("Error reading shebang: %v", err))
+		return
+	}
+
+	// Extract the interpreter from the shebang
+	shebang = strings.TrimSpace(strings.TrimPrefix(shebang, "#!"))
+	interpreterArgs := strings.Split(shebang, " ")
+	if len(interpreterArgs) < 2 {
+		interpreterArgs = []string{"python3"} // Default interpreter if shebang is not found or incorrect
+	}
 
 	// Try to read existing PID file
 	pidData, err := os.ReadFile(pidFilePath)
@@ -1523,7 +1541,7 @@ func startObjectDetector(scriptPath string) {
 			os.Exit(1)
 		}
 
-		cmd := exec.Command("python3", "-u", scriptPath)
+		cmd := exec.Command(interpreterArgs[0], append(interpreterArgs[1:], "-u", scriptPath)...)
 		cmd.Dir = basePath
 
 		stdout, err := cmd.StdoutPipe()

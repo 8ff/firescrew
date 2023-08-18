@@ -14,7 +14,7 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 ## Key Features
 - **Real-Time Motion Detection**: Firescrew can detect motion from a live feed and provide real-time alerts.
 - **Object Identification**: Identify specific objects like cars and people in real-time.
-- **Model Flexibility**: Firescrew can use the latest YOLOv8 model or Coral EdgeTPU models for enhanced performance.
+- **Model Flexibility**: Firescrew can use the latest YOLOv8 model, MobileNET with Coral TPU or YOLOv8s with CoreML (MAC Only) for enhanced performance.
 - **Performance**: Firescrew takes full advantage of Go's concurrency handling and speed, providing a high-performance solution for real-time image processing.
 - **RTSP Network Camera Support**: Firescrew is compatible with RTSP network cameras, extending its applicability in a wide range of scenarios.
 - **MQTT/Webhook/Script/Slack**: Firescrew can send events to MQTT/Webhook/Script/Slack for further processing.
@@ -23,6 +23,7 @@ Firescrew is a cutting-edge application written in Go that enables real-time obj
 
 ```
 Things added/fixed in last 3 days:
+- Added CoreML YoloV8s (Mac only)
 - Added MQTT/Webhook/ScriptHook/Slack support!
 - Added ffprobe timeout/Fixed MQTT port in template/Added docs page
 - Added inference statistics and much more!
@@ -162,6 +163,15 @@ You can do this by running the following command:
 ```bash
 pip3 install pycoral numpy Pillow
 ```
+
+## Running YOLOV8s with CoreML (Mac Only)
+This has been tested working on `M1/M2 MacOS 13.4.1`, it works when using `python3.10` and not `3.11`
+```bash
+git clone https://github.com/8ff/firescrew && cd firescrew/assets
+pip3.10 install coremltools Pillow
+./objectDetectServerCoreML.py
+```
+Now in your config.json file set `"networkObjectDetectServer": "",` addr:8555 where `addr` is the ip of your machine running the above script
 
 ## RTSP Camera Stream URLs
 Firescrew supports two different RTSP camera streams: a low resolution stream (`deviceUrl`) and a high resolution stream (`hiResDeviceUrl`). These streams are used for different purposes and should be set up accordingly.
@@ -305,7 +315,6 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 
 
 ## Roadmap
-- Build a doc site
 - GetDimensions Web UI
 - Add benchmarks
 - Add uploading footage to S3 compatible cloud host

@@ -1382,7 +1382,7 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 		}
 
 		// Check if connection is broken and re-establish it if needed
-		if err := runtimeConfig.objectPredictConn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		if err := runtimeConfig.objectPredictConn.SetDeadline(time.Now().Add(60 * time.Second)); err != nil {
 			// Re-establish connection
 			if err := establishConnection(); err != nil {
 				errorChan <- err
@@ -1447,8 +1447,6 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	case err := <-errorChan:
 		Log("debug", fmt.Sprintf("Error running objectPredict: %v", err))
 		return nil, err
-	case <-time.After(5 * time.Second):
-		return nil, errors.New("operation timed out")
 	}
 }
 

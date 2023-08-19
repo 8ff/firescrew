@@ -135,6 +135,7 @@ type RuntimeConfig struct {
 	HiResStreamParams     StreamParams
 	objectPredictConn     net.Conn
 	InferenceTimingBuffer []InferenceStats
+	modelReady            bool
 }
 
 type IgnoreAreaClass struct {
@@ -823,19 +824,32 @@ func main() {
 		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
 		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 		// Set networkObjectDetectServer path to 127.0.0.1:8555
-		Log("notice", "Warming up...")
-		time.Sleep(10 * time.Second) // Give time to kill old instance if still running
+		// time.Sleep(10 * time.Second) // Give time to kill old instance if still running
 		// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
-		for {
-			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 10*time.Second)
-			if err != nil {
-				Log("notice", "Waiting for object detection server...")
-				time.Sleep(1 * time.Second)
-				continue
+		Log("info", "Waiting for object detector to come up")
+		if !runtimeConfig.modelReady {
+			for {
+				conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 1*time.Second)
+				if err != nil {
+					Log("warning", fmt.Sprintf("Waiting for object detector to start: %v", err))
+					time.Sleep(1 * time.Second)
+				} else {
+					conn.Close()
+					break
+				}
 			}
-			Log("notice", "Object detection server connected")
-			conn.Close()
-			break
+		}
+	} else {
+		Log("info", fmt.Sprintf("Checking connection to: %s", globalConfig.Motion.NetworkObjectDetectServer))
+		for {
+			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 1*time.Second)
+			if err != nil {
+				Log("warning", fmt.Sprintf("Waiting for %s to respond: %v", globalConfig.Motion.NetworkObjectDetectServer, err))
+				time.Sleep(1 * time.Second)
+			} else {
+				conn.Close()
+				break
+			}
 		}
 	}
 
@@ -1600,8 +1614,9 @@ func startObjectDetector(scriptPath string) {
 			os.Exit(1)
 		}()
 
-		err = cmd.Wait()
+		runtimeConfig.modelReady = true // Allow objectPredict to start sending images
 
+		err = cmd.Wait()
 		if err != nil {
 			Log("error", fmt.Sprintf("Embedded python script failed: %s", stderr.String()))
 		} else {

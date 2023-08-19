@@ -49,7 +49,7 @@ var Version string
 //go:embed assets/*
 var assetsFs embed.FS
 
-var everyNthFrame = 5         // Only process every Nth frame for object detection
+var everyNthFrame = 2         // Only process every Nth frame for object detection
 var interenceAvgInterval = 10 // Frames to average inference time over
 
 var stream *mjpeg.Stream
@@ -768,7 +768,7 @@ func main() {
 			FPS:    hiResStreamInfo.Streams[streamIndex].RFrameRate,
 		}
 	} else {
-		runtimeConfig.HiResStreamParams = globalConfig.LoStreamParamBypass
+		runtimeConfig.HiResStreamParams = globalConfig.HiStreamParamBypass
 	}
 
 	if globalConfig.LoStreamParamBypass.Width == 0 || globalConfig.LoStreamParamBypass.Height == 0 || globalConfig.LoStreamParamBypass.FPS == 0 {
@@ -823,7 +823,8 @@ func main() {
 		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
 		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
 		// Set networkObjectDetectServer path to 127.0.0.1:8555
-		time.Sleep(5 * time.Second) // Give time to kill old instance if still running
+		Log("notice", "Warming up...")
+		time.Sleep(10 * time.Second) // Give time to kill old instance if still running
 		// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
 		for {
 			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 10*time.Second)

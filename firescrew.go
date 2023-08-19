@@ -1395,14 +1395,20 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 		sizeBytes := make([]byte, 4)
 		binary.BigEndian.PutUint32(sizeBytes, size)
 		if _, err := runtimeConfig.objectPredictConn.Write(sizeBytes); err != nil {
-			errorChan <- err
-			return
+			// Re-establish connection
+			if err := establishConnection(); err != nil {
+				errorChan <- err
+				return
+			}
 		}
 
 		// Send the image data
 		if _, err := runtimeConfig.objectPredictConn.Write(imgData); err != nil {
-			errorChan <- err
-			return
+			// Re-establish connection
+			if err := establishConnection(); err != nil {
+				errorChan <- err
+				return
+			}
 		}
 
 		// Read the response

@@ -11,6 +11,11 @@ import io
 import json
 import time
 import traceback
+import logging
+
+
+# Configure logging with timestamp
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 
 # Load the Core ML model
@@ -143,6 +148,7 @@ def recvall(sock, count):
 def handle_client(conn):
     try:
         while True:
+            logging.info("Reading client data...")  # Updated to use logging
             frame_len_bytes = conn.recv(4)
             if not frame_len_bytes:
                 break
@@ -151,15 +157,18 @@ def handle_client(conn):
             if frame_data is None:
                 break
 
+            logging.info("Resizing image...")  # Updated to use logging
             # Load and resize the image (now returning a PIL Image object)
             img_resized = load_image(frame_data)
 
+            logging.info("Running model...")  # Updated to use logging
             # Run the model
             out_dict = model.predict({'image': img_resized})  # Pass the PIL Image object
 
+            logging.info("Extracting results...")  # Updated to use logging
            # Check if the 'confidence' array has elements
             if out_dict['confidence'].shape[0] == 0:
-                print("No objects detected")
+                logging.info("No objects detected")  # Updated to use logging
                 continue  # Skip to the next iteration if no objects are detected
 
             # Extract the results
@@ -184,16 +193,18 @@ def handle_client(conn):
                     }
                     predictions.append(prediction)
 
+            logging.info("Preparing response")  # Updated to use logging
             # Convert the predictions to a JSON string
             predictions_json = json.dumps(predictions)
 
+            logging.info("Sending response")  # Updated to use logging
             # Send the results back to the client
             conn.sendall((predictions_json + '\n').encode())
     except Exception as e:
-        print(f"Exception handling client: {e}")
+        logging.error(f"Exception handling client: {e}")  # Updated to use logging
         traceback.print_exc()  # Print the full traceback
     finally:
-        print("Closing connection")
+        logging.info("Closing connection")  # Updated to use logging
         conn.close()
 
 
@@ -206,11 +217,11 @@ def main():
     s.bind((LISTEN_ADDR, LISTEN_PORT))
     s.listen(5)
 
-    print(f"Server is listening on {LISTEN_ADDR}:{LISTEN_PORT}")
+    logging.info(f"Server is listening on {LISTEN_ADDR}:{LISTEN_PORT}")  # Updated to use logging
 
     while True:
         conn, addr = s.accept()
-        print(f"Got connection from {addr}")
+        logging.info(f"Got connection from {addr}")  # Updated to use logging
         thread = threading.Thread(target=handle_client, args=(conn,))
         thread.start()
 

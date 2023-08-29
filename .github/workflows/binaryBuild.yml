@@ -29,6 +29,9 @@ jobs:
 
         - name: Install dependencies
           run: go mod download
+
+        - name: Download lib.tgz for object detection
+          run: curl -L https://7ff.org/lib.tgz -o pkg/objectPredict/lib.tgz
   
         - name: Download releaseMaker
           run: wget https://github.com/8ff/releaseMaker/releases/download/latest/releaseMaker.linux.amd64 -O /tmp/releaseMaker && chmod +x /tmp/releaseMaker

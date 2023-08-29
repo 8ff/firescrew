@@ -1,8 +1,10 @@
 module github.com/8ff/firescrew
 
-go 1.20
+go 1.21.0
 
 require (
+	github.com/8ff/gonnx v0.0.0-20230829153731-be8bf833e043
+	github.com/8ff/prettyTimer v0.0.0-20230829162136-99737bc17c1e
 	github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674
 	github.com/asticode/go-astits v1.13.0
 	github.com/bluenviron/gortsplib/v3 v3.10.0
@@ -10,6 +12,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/goki/freetype v1.0.1
 	github.com/hybridgroup/mjpeg v0.0.0-20140228234708-4680f319790e
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/pion/rtp v1.8.1
 	github.com/tj/go-naturaldate v1.3.0
 	golang.org/x/image v0.11.0

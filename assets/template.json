@@ -21,6 +21,8 @@
     "motion": {
         "confidenceMinThreshold": 0.3,
         "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
+        "onnxModel": "yolov8n",
+        "onnxEnableCoreMl": true,
         "embeddedObjectScript": "objectDetectServerYolo.py",
         "networkObjectDetectServer": "",
         "prebufferSeconds": 10,

@@ -41,6 +41,7 @@ import (
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/math/fixed"
 
+	ob "github.com/8ff/firescrew/pkg/objectPredict"
 	"github.com/hybridgroup/mjpeg"
 )
 
@@ -81,6 +82,8 @@ type Config struct {
 	EnableOutputStream            bool              `json:"enableOutputStream"`
 	OutputStreamAddr              string            `json:"outputStreamAddr"`
 	Motion                        struct {
+		OnnxModel                 string   `json:"onnxModel"`
+		OnnxEnableCoreMl          bool     `json:"onnxEnableCoreMl"`
 		EmbeddedObjectScript      string   `json:"EmbeddedObjectScript"`
 		ConfidenceMinThreshold    float64  `json:"confidenceMinThreshold"`
 		LookForClasses            []string `json:"lookForClasses"`
@@ -136,6 +139,7 @@ type RuntimeConfig struct {
 	objectPredictConn     net.Conn
 	InferenceTimingBuffer []InferenceStats
 	modelReady            bool
+	ObjectPredictClient   *ob.Client
 }
 
 type IgnoreAreaClass struct {
@@ -288,6 +292,8 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
 	Log("info", fmt.Sprintf("Video OnlyRemuxMp4: %t", config.Video.OnlyRemuxMp4))
+	Log("info", fmt.Sprintf("Motion OnnxModel: %s", config.Motion.OnnxModel))
+	Log("info", fmt.Sprintf("Motion OnnxEnableCoreMl: %t", config.Motion.OnnxEnableCoreMl))
 	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
 	Log("info", fmt.Sprintf("Motion Object Min Threshold: %f", config.Motion.ConfidenceMinThreshold))
 	Log("info", fmt.Sprintf("Motion LookForClasses: %v", config.Motion.LookForClasses))
@@ -820,35 +826,47 @@ func main() {
 	path := copyAssetsToTemp()
 	// Start the object detector
 
-	if globalConfig.Motion.NetworkObjectDetectServer == "" {
-		globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
-		go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
-		// Set networkObjectDetectServer path to 127.0.0.1:8555
-		// time.Sleep(10 * time.Second) // Give time to kill old instance if still running
-		// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
-		Log("info", "Waiting for object detector to come up")
-		if !runtimeConfig.modelReady {
+	if globalConfig.Motion.OnnxModel != "" {
+		var err error
+		runtimeConfig.ObjectPredictClient, err = ob.Init(ob.Config{Model: "yolov8n", EnableCoreMl: true})
+		if err != nil {
+			fmt.Println("Cannot init model:", err)
+			return
+		}
+
+		defer runtimeConfig.ObjectPredictClient.Close() // Cleanup files
+
+	} else {
+		if globalConfig.Motion.NetworkObjectDetectServer == "" {
+			globalConfig.Motion.NetworkObjectDetectServer = "127.0.0.1:8555"
+			go startObjectDetector(path + "/" + globalConfig.Motion.EmbeddedObjectScript)
+			// Set networkObjectDetectServer path to 127.0.0.1:8555
+			// time.Sleep(10 * time.Second) // Give time to kill old instance if still running
+			// Wait until tcp connection is works to globalConfig.Motion.NetworkObjectDetectServer
+			Log("info", "Waiting for object detector to come up")
+			if !runtimeConfig.modelReady {
+				for {
+					conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 1*time.Second)
+					if err != nil {
+						Log("warning", fmt.Sprintf("Waiting for object detector to start: %v", err))
+						time.Sleep(1 * time.Second)
+					} else {
+						conn.Close()
+						break
+					}
+				}
+			}
+		} else {
+			Log("info", fmt.Sprintf("Checking connection to: %s", globalConfig.Motion.NetworkObjectDetectServer))
 			for {
 				conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 1*time.Second)
 				if err != nil {
-					Log("warning", fmt.Sprintf("Waiting for object detector to start: %v", err))
+					Log("warning", fmt.Sprintf("Waiting for %s to respond: %v", globalConfig.Motion.NetworkObjectDetectServer, err))
 					time.Sleep(1 * time.Second)
 				} else {
 					conn.Close()
 					break
 				}
-			}
-		}
-	} else {
-		Log("info", fmt.Sprintf("Checking connection to: %s", globalConfig.Motion.NetworkObjectDetectServer))
-		for {
-			conn, err := net.DialTimeout("tcp", globalConfig.Motion.NetworkObjectDetectServer, 1*time.Second)
-			if err != nil {
-				Log("warning", fmt.Sprintf("Waiting for %s to respond: %v", globalConfig.Motion.NetworkObjectDetectServer, err))
-				time.Sleep(1 * time.Second)
-			} else {
-				conn.Close()
-				break
 			}
 		}
 	}
@@ -988,13 +1006,43 @@ func main() {
 						// Only run this on every 5th frame
 						if msg.Frame != nil {
 
+							var predict []Prediction
+							var err error
+							// If globalConfig.Motion.OnnxModel is blank run this
 							// Send data to objectPredict
-							predict, err := objectPredict(msg.Frame)
-							if err != nil {
-								Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
-								return
-							}
+							if globalConfig.Motion.OnnxModel == "" {
+								predict, err = objectPredict(msg.Frame)
+								if err != nil {
+									Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
+									return
+								}
+							} else {
+								timer := time.Now()
+								objects, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
+								if err != nil {
+									fmt.Println("Cannot predict:", err)
+									return
+								}
 
+								// Detect took
+								took := time.Since(timer).Milliseconds()
+
+								for _, object := range objects {
+									pred := Prediction{
+										Object:     object.ClassID,
+										ClassName:  object.ClassName,
+										Box:        []float32{object.X1, object.Y1, object.X2, object.Y2},
+										Top:        int(object.Y1),
+										Bottom:     int(object.Y2),
+										Left:       int(object.X1),
+										Right:      int(object.X2),
+										Confidence: object.Confidence,
+										Took:       float64(took),
+									}
+									predict = append(predict, pred)
+								}
+
+							}
 							calcInferenceStats(predict) // Calculate inference stats
 
 							if len(predict) > 0 {

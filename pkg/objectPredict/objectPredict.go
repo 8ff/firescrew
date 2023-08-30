@@ -18,7 +18,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/8ff/gonnx"
+	onnx "github.com/8ff/onnxruntime_go"
 	"github.com/nfnt/resize"
 )
 
@@ -43,9 +43,15 @@ type Client struct {
 	ModelHeight    int
 	LibPath        string
 	LibExtractPath string
-	Session        *gonnx.SessionV3
+	RuntimeSession ModelSession
 	EnableCuda     bool
 	EnableCoreMl   bool
+}
+
+type ModelSession struct {
+	Session *onnx.AdvancedSession
+	Input   *onnx.Tensor[float32]
+	Output  *onnx.Tensor[float32]
 }
 
 type Object struct {
@@ -144,78 +150,86 @@ func Init(opt Config) (*Client, error) {
 	if err != nil {
 		return &Client{}, err
 	}
-	client.Session = ses
+	client.RuntimeSession = ses
 	return &client, nil
 }
 
 func (c *Client) Predict(imgRaw image.Image) ([]Object, error) {
 	input, img_width, img_height := c.prepareInput(imgRaw)
-	inputShape := gonnx.NewShape(1, 3, 640, 640)
-	inputTensor, err := gonnx.NewTensor(inputShape, input)
+	inputTensor := c.RuntimeSession.Input.GetData()
+
+	// inTensor := modelSes.Input.GetData()
+	copy(inputTensor, input)
+	err := c.RuntimeSession.Session.Run()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error running session: %w", err)
 	}
 
-	output, e := c.Session.Run([]*gonnx.TensorWithType{{
-		Tensor:     inputTensor,
-		TensorType: "float32",
-	}})
-	if e != nil {
-		return nil, fmt.Errorf("error running session: %w", e)
-	}
-
-	var allFloat32Data []float32
-
-	for i := range output {
-		data := output[i].GetData()
-		float32Data, ok := data.([]float32)
-		if !ok {
-			continue
-		}
-		allFloat32Data = append(allFloat32Data, float32Data...)
-	}
-
-	objects := processOutput(allFloat32Data, img_width, img_height)
-
+	objects := processOutput(c.RuntimeSession.Output.GetData(), img_width, img_height)
 	return objects, nil
 }
 
-func (c *Client) initSession() (*gonnx.SessionV3, error) {
+func (c *Client) initSession() (ModelSession, error) {
 	// Change dir to libExtractPath and then change back
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return ModelSession{}, err
 	}
 	err = os.Chdir(c.LibExtractPath) // Change dir to libExtractPath
 	if err != nil {
-		return nil, err
+		return ModelSession{}, err
 	}
 
-	gonnx.SetSharedLibraryPath(c.LibPath) // Set libPath
-	err = gonnx.InitializeEnvironment()
+	onnx.SetSharedLibraryPath(c.LibPath) // Set libPath
+	err = onnx.InitializeEnvironment()
 	if err != nil {
-		return nil, err
+		return ModelSession{}, err
 	}
 	err = os.Chdir(cwd) // Change back to cwd
 	if err != nil {
-		return nil, err
+		return ModelSession{}, err
 	}
 
-	var opts string
-	switch {
-	case c.EnableCuda:
-		opts = "cuda"
-	case c.EnableCoreMl:
-		opts = "coreml"
-	default:
-		opts = ""
-	}
-
-	session, e := gonnx.NewSessionV3(c.ModelPath, opts)
+	options, e := onnx.NewSessionOptions()
 	if e != nil {
-		return nil, fmt.Errorf("error creating session: %w", e)
+		return ModelSession{}, fmt.Errorf("error creating session options: %w", e)
 	}
-	return session, nil
+	defer options.Destroy()
+
+	if c.EnableCoreMl { // If CoreML is enabled, append the CoreML execution provider
+		e = options.AppendExecutionProviderCoreML(0)
+		if e != nil {
+			options.Destroy()
+			return ModelSession{}, err
+		}
+		defer options.Destroy()
+	}
+
+	// Create and prepare a blank image
+	blankImage := CreateBlankImage(c.ModelWidth, c.ModelHeight)
+	input, _, _ := c.prepareInput(blankImage)
+
+	inputShape := onnx.NewShape(1, 3, 640, 640)
+	inputTensor, err := onnx.NewTensor(inputShape, input)
+	if err != nil {
+		return ModelSession{}, fmt.Errorf("error creating input tensor: %w", err)
+	}
+
+	outputShape := onnx.NewShape(1, 84, 8400)
+	outputTensor, err := onnx.NewEmptyTensor[float32](outputShape)
+	if err != nil {
+		return ModelSession{}, fmt.Errorf("error creating output tensor: %w", err)
+	}
+
+	session, err := onnx.NewAdvancedSession(c.ModelPath,
+		[]string{"images"}, []string{"output0"},
+		[]onnx.ArbitraryTensor{inputTensor}, []onnx.ArbitraryTensor{outputTensor}, options)
+
+	return ModelSession{
+		Session: session,
+		Input:   inputTensor,
+		Output:  outputTensor,
+	}, nil
 }
 
 func (c *Client) prepareInput(imageObj image.Image) ([]float32, int64, int64) {
@@ -543,5 +557,21 @@ func (c *Client) Close() {
 		}
 	}
 
-	c.Session.Destroy() // Cleanup session
+	c.RuntimeSession.Session.Destroy() // Cleanup session
+	c.RuntimeSession.Input.Destroy()   // Cleanup input
+	c.RuntimeSession.Output.Destroy()  // Cleanup output
+}
+
+func CreateBlankImage(width, height int) image.Image {
+	// Create a new blank image with the given dimensions
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	// Fill the image with the background color
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.RGBA{0, 0, 0, 0})
+		}
+	}
+
+	return img
 }

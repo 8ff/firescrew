@@ -1,7 +1,7 @@
-github.com/8ff/gonnx v0.0.0-20230829153731-be8bf833e043 h1:vMooYcj/8AQmjoeWufnrX67GpHJadI/WX4fFjDqmQZc=
-github.com/8ff/gonnx v0.0.0-20230829153731-be8bf833e043/go.mod h1:OvWCkxwg/6UPaf4WtAlfomCkjxoJKomjHwX4+qvr92k=
-github.com/8ff/prettyTimer v0.0.0-20230829162136-99737bc17c1e h1:c4wqswZSJIuF35aETvcSIiRTWNb0/nKQWSi+dr5gR6Y=
-github.com/8ff/prettyTimer v0.0.0-20230829162136-99737bc17c1e/go.mod h1:iQAVuoCXBrrxT875kd25GCALLf+ulTOt/mCikuQs2j8=
+github.com/8ff/onnxruntime_go v0.0.0-20230830191505-2b14a218432e h1:471ee5xiyPAM4P5bUS03t462ZZk0tAKVVzJ30DBzEpA=
+github.com/8ff/onnxruntime_go v0.0.0-20230830191505-2b14a218432e/go.mod h1:0OvBfqX5NGJJIMwZhLtZ9udqfyBpcXObhCbzWn4Iq6M=
+github.com/8ff/prettyTimer v0.0.0-20230830184900-c96793faf613 h1:mIPSzE+OciNlYwNQs1qi7GoKRI3SKGKrVsGnap20iqQ=
+github.com/8ff/prettyTimer v0.0.0-20230830184900-c96793faf613/go.mod h1:iQAVuoCXBrrxT875kd25GCALLf+ulTOt/mCikuQs2j8=
 github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674 h1:9L0K8szFUXJ0V71/I5YJeCmOXVhgU0+v0+9nf8mHqG0=
 github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674/go.mod h1:brULTDkAKe2Ut39W20RPVcc0M6MhaHLTS/oGJiC5tVs=
 github.com/asticode/go-astikit v0.30.0 h1:DkBkRQRIxYcknlaU7W7ksNfn4gMFsB0tqMJflxkRsZA=

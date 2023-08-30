@@ -479,10 +479,16 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 
 func CheckFFmpegAndFFprobe() (bool, error) {
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		// Print PATH
+		path := os.Getenv("PATH")
+		Log("error", fmt.Sprintf("PATH: %s", path))
 		return false, fmt.Errorf("ffmpeg binary not found: %w", err)
 	}
 
 	if _, err := exec.LookPath("ffprobe"); err != nil {
+		// Print PATH
+		path := os.Getenv("PATH")
+		Log("error", fmt.Sprintf("PATH: %s", path))
 		return false, fmt.Errorf("ffprobe binary not found: %w", err)
 	}
 
@@ -659,7 +665,7 @@ func recodeToMP4(inputFile string) (string, error) {
 	var cmd *exec.Cmd
 	// Create the FFmpeg command
 	if globalConfig.Video.OnlyRemuxMp4 {
-		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c", "copy", outputFile)
+		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c", "copy", "-hls_segment_type", "fmp4", outputFile)
 	} else {
 		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:v", "libx264", "-c:a", "aac", outputFile)
 	}
@@ -706,7 +712,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, ("Usage: firescrew -s [path] [addr]\n"))
 			return
 		}
-		firescrewServe.Serve(os.Args[2], os.Args[3])
+		err := firescrewServe.Serve(os.Args[2], os.Args[3])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting server: %v\n", err)
+			return
+		}
 	case "-v", "--version", "v":
 		// Print version
 		fmt.Println(Version)
@@ -733,7 +743,7 @@ func main() {
 	// Check if ffmpeg/ffprobe binaries are available
 	_, err := CheckFFmpegAndFFprobe()
 	if err != nil {
-		Log("error", "Unable to find ffmpeg/ffprobe binaries. Please install them")
+		Log("error", fmt.Sprintf("Unable to find ffmpeg/ffprobe binaries. Please install them: %s", err))
 		os.Exit(2)
 	}
 
@@ -997,80 +1007,78 @@ func main() {
 					runtimeConfig.MotionMutex.Unlock()
 				}
 
-				if globalConfig.Motion.NetworkObjectDetectServer != "" {
-					// Python motion detection
-					if predictFrameCounter%everyNthFrame == 0 {
-						if predictFrameCounter > 10000 {
-							predictFrameCounter = 0
-						}
-						// Only run this on every 5th frame
-						if msg.Frame != nil {
-
-							var predict []Prediction
-							var err error
-							// If globalConfig.Motion.OnnxModel is blank run this
-							// Send data to objectPredict
-							if globalConfig.Motion.OnnxModel == "" {
-								predict, err = objectPredict(msg.Frame)
-								if err != nil {
-									Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
-									return
-								}
-							} else {
-								timer := time.Now()
-								objects, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
-								if err != nil {
-									fmt.Println("Cannot predict:", err)
-									return
-								}
-
-								// Detect took
-								took := time.Since(timer).Milliseconds()
-
-								for _, object := range objects {
-									pred := Prediction{
-										Object:     object.ClassID,
-										ClassName:  object.ClassName,
-										Box:        []float32{object.X1, object.Y1, object.X2, object.Y2},
-										Top:        int(object.Y1),
-										Bottom:     int(object.Y2),
-										Left:       int(object.X1),
-										Right:      int(object.X2),
-										Confidence: object.Confidence,
-										Took:       float64(took),
-									}
-									predict = append(predict, pred)
-								}
-
-							}
-							calcInferenceStats(predict) // Calculate inference stats
-
-							if len(predict) > 0 {
-								// Notify in realtime about detected objects
-								type Event struct {
-									Type             string       `json:"type"`
-									Timestamp        time.Time    `json:"timestamp"`
-									PredictedObjects []Prediction `json:"predicted_objects"`
-								}
-
-								eventRaw := Event{
-									Type:             "objects_predicted",
-									Timestamp:        time.Now(),
-									PredictedObjects: predict,
-								}
-								eventJson, err := json.Marshal(eventRaw)
-								if err != nil {
-									Log("error", fmt.Sprintf("Error marshalling object_predicted event: %v", err))
-									return
-								}
-								eventHandler("objects_detected", eventJson)
-							}
-
-							performDetectionOnObject(rgba, predict)
-						}
+				// Python motion detection
+				if predictFrameCounter%everyNthFrame == 0 {
+					if predictFrameCounter > 10000 {
+						predictFrameCounter = 0
 					}
-					predictFrameCounter++
+					// Only run this on every 5th frame
+					if msg.Frame != nil {
+
+						var predict []Prediction
+						var err error
+						// If globalConfig.Motion.OnnxModel is blank run this
+						// Send data to objectPredict
+						if globalConfig.Motion.OnnxModel == "" {
+							predict, err = objectPredict(msg.Frame)
+							if err != nil {
+								Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
+								return
+							}
+						} else {
+							timer := time.Now()
+							objects, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
+							if err != nil {
+								fmt.Println("Cannot predict:", err)
+								return
+							}
+
+							// Detect took
+							took := time.Since(timer).Milliseconds()
+
+							for _, object := range objects {
+								pred := Prediction{
+									Object:     object.ClassID,
+									ClassName:  object.ClassName,
+									Box:        []float32{object.X1, object.Y1, object.X2, object.Y2},
+									Top:        int(object.Y1),
+									Bottom:     int(object.Y2),
+									Left:       int(object.X1),
+									Right:      int(object.X2),
+									Confidence: object.Confidence,
+									Took:       float64(took),
+								}
+								predict = append(predict, pred)
+							}
+
+						}
+						calcInferenceStats(predict) // Calculate inference stats
+
+						if len(predict) > 0 {
+							// Notify in realtime about detected objects
+							type Event struct {
+								Type             string       `json:"type"`
+								Timestamp        time.Time    `json:"timestamp"`
+								PredictedObjects []Prediction `json:"predicted_objects"`
+							}
+
+							eventRaw := Event{
+								Type:             "objects_predicted",
+								Timestamp:        time.Now(),
+								PredictedObjects: predict,
+							}
+							eventJson, err := json.Marshal(eventRaw)
+							if err != nil {
+								Log("error", fmt.Sprintf("Error marshalling object_predicted event: %v", err))
+								return
+							}
+							eventHandler("objects_detected", eventJson)
+						}
+
+						performDetectionOnObject(rgba, predict)
+					}
 				}
+				predictFrameCounter++
 
 				if globalConfig.EnableOutputStream {
 					streamImage(rgba, stream) // Stream the image to the web

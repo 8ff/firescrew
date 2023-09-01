@@ -1,0 +1,54 @@
+# Model accuracy benchmark results
+These were ran on M1 Using CoreML using a.jpg input
+
+## YOLOV8N
+```
+Object: {person 0 0.53759766 52.515625 279.0625 91.21875 407.78125}
+Object: {person 0 0.60791016 107.671875 246.6875 137.40625 365.25}
+Min Time: 31.426541ms, Max Time: 31.426541ms, Avg Time: 31.426541ms, Count: 1
+50th: 31.426541ms, 90th: 31.426541ms, 99th: 31.426541ms
+```
+## YOLOV8S
+```
+Object: {truck 7 0.5073242 222.28125 140.54688 262.35938 185.21875}
+Object: {person 0 0.55371094 55.95703 256.09375 73.10156 308.0625}
+Object: {person 0 0.5805664 52.40625 294.25 89.359375 406.375}
+Object: {car 2 0.61279297 141.625 216.25 288.53125 397.3125}
+Object: {person 0 0.70410156 108.55469 245.78125 136.26562 364.5}
+Min Time: 43.306959ms, Max Time: 43.306959ms, Avg Time: 43.306959ms, Count: 1
+50th: 43.306959ms, 90th: 43.306959ms, 99th: 43.306959ms
+```
+## YOLOV8M
+```
+Object: {person 0 0.5 108.46875 245.64062 136.85938 364.4375}
+Object: {person 0 0.5102539 52.66797 291.90625 83.828125 405.65625}
+Object: {person 0 0.55566406 55.335938 254.69531 73.14453 306.09375}
+Object: {car 2 0.77197266 142.5 218 289.125 392.375}
+Min Time: 78.922208ms, Max Time: 78.922208ms, Avg Time: 78.922208ms, Count: 1
+50th: 78.922208ms, 90th: 78.922208ms, 99th: 78.922208ms
+```
+
+## YOLOV8_NAS_S
+```
+Object: {person 0 0.53759766 52.515625 279.0625 91.21875 407.78125}
+Object: {person 0 0.60791016 107.671875 246.6875 137.40625 365.25}
+Min Time: 31.063458ms, Max Time: 31.063458ms, Avg Time: 31.063458ms, Count: 1
+50th: 31.063458ms, 90th: 31.063458ms, 99th: 31.063458ms
+```
+## YOLOV8_NAS_M
+```
+Object: {person 0 0.53759766 52.515625 279.0625 91.21875 407.78125}
+Object: {person 0 0.60791016 107.671875 246.6875 137.40625 365.25}
+Min Time: 29.8715ms, Max Time: 29.8715ms, Avg Time: 29.8715ms, Count: 1
+50th: 29.8715ms, 90th: 29.8715ms, 99th: 29.8715ms
+```
+## YOLOV8_NAS_L
+```
+Object: {person 0 0.53759766 52.515625 279.0625 91.21875 407.78125}
+Object: {person 0 0.60791016 107.671875 246.6875 137.40625 365.25}
+Min Time: 30.809125ms, Max Time: 30.809125ms, Avg Time: 30.809125ms, Count: 1
+50th: 30.809125ms, 90th: 30.809125ms, 99th: 30.809125ms
+```
+
+## Conclusion
+The most optimal model appears to be YOLOV8S

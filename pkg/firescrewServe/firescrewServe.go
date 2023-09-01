@@ -110,6 +110,14 @@ func loadData(folder string) ([]FileData, error) {
 				return startI.After(startJ)
 			})
 
+			// Check if .mp4 version of the file exists and replace VideoFile with it
+			mp4FilePath := strings.TrimSuffix(fileData.VideoFile, filepath.Ext(fileData.VideoFile)) + ".mp4"
+			if _, err := os.Stat(folder + "/" + mp4FilePath); err == nil {
+				// If it exists, serve the .mp4 version instead
+				// Log("debug", fmt.Sprintf("Serving .mp4 file: %s", mp4FilePath))
+				fileData.VideoFile = mp4FilePath // Replace with .mp4 file path
+			}
+
 			data = append(data, fileData)
 		}
 		return nil

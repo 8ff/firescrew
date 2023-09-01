@@ -17,6 +17,7 @@ import (
 	"image/color"
 	"image/draw"
 	"image/jpeg"
+	"image/png"
 	"io"
 	"log"
 	"math"
@@ -38,10 +39,9 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/goki/freetype"
 	"github.com/goki/freetype/truetype"
-	"golang.org/x/image/bmp"
-	"golang.org/x/image/math/fixed"
 
 	ob "github.com/8ff/firescrew/pkg/objectPredict"
+	"github.com/8ff/prettyTimer"
 	"github.com/hybridgroup/mjpeg"
 )
 
@@ -50,7 +50,7 @@ var Version string
 //go:embed assets/*
 var assetsFs embed.FS
 
-var everyNthFrame = 2         // Only process every Nth frame for object detection
+var everyNthFrame = 1         // Only process every Nth frame for object detection
 var interenceAvgInterval = 10 // Frames to average inference time over
 
 var stream *mjpeg.Stream
@@ -140,6 +140,7 @@ type RuntimeConfig struct {
 	InferenceTimingBuffer []InferenceStats
 	modelReady            bool
 	ObjectPredictClient   *ob.Client
+	CodecName             string
 }
 
 type IgnoreAreaClass struct {
@@ -495,9 +496,92 @@ func CheckFFmpegAndFFprobe() (bool, error) {
 	return true, nil
 }
 
-func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
-	cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-re", "-i", rtspURL, "-c:v", "bmp", "-f", "image2pipe", "-")
+// func processRTSPFeedOLD(rtspURL string, msgChannel chan<- FrameMsg) {
+// 	// cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-re", "-i", rtspURL, "-c:v", "bmp", "-f", "image2pipe", "-")
+// 	cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-re", "-i", rtspURL, "-analyzeduration", "1000000", "-probesize", "1000000", "-vf", "select=not(mod(n\\,5))", "-fps_mode", "vfr", "-c:v", "bmp", "-f", "image2pipe", "-")
+// 	stderrBuffer := &bytes.Buffer{}
+// 	cmd.Stderr = stderrBuffer
 
+// 	pipe, err := cmd.StdoutPipe()
+// 	if err != nil {
+// 		msgChannel <- FrameMsg{Error: err.Error()}
+// 		return
+// 	}
+
+// 	err = cmd.Start()
+// 	if err != nil {
+// 		msgChannel <- FrameMsg{Error: err.Error()}
+// 		return
+// 	}
+
+// 	reader := io.Reader(pipe)
+// 	buffer := make([]byte, 14) // BMP header size
+
+// 	for {
+// 		_, err := io.ReadFull(reader, buffer)
+// 		if err != nil {
+// 			if err != io.EOF {
+// 				msgChannel <- FrameMsg{Error: err.Error()}
+// 			}
+// 			break
+// 		}
+
+// 		if buffer[0] != 'B' || buffer[1] != 'M' {
+// 			msgChannel <- FrameMsg{Error: "Not a BMP file"}
+// 			continue
+// 		}
+
+// 		fileSize := binary.LittleEndian.Uint32(buffer[2:6])
+// 		fileBuffer := make([]byte, fileSize-14)
+// 		_, err = io.ReadFull(reader, fileBuffer)
+// 		if err != nil {
+// 			msgChannel <- FrameMsg{Error: err.Error()}
+// 			continue
+// 		}
+
+// 		imageBuffer := append(buffer, fileBuffer...)
+// 		img, err := bmp.Decode(bytes.NewReader(imageBuffer))
+// 		if err != nil {
+// 			msgChannel <- FrameMsg{Error: err.Error()}
+// 			continue
+// 		}
+
+// 		msgChannel <- FrameMsg{Frame: img}
+// 	}
+
+// 	err = cmd.Wait()
+// 	exitCode := 0 // Default exit code if no error occurred
+// 	if err != nil {
+// 		if exitErr, ok := err.(*exec.ExitError); ok {
+// 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+// 				exitCode = status.ExitStatus()
+// 			}
+// 		}
+// 		msgChannel <- FrameMsg{Error: "FFmpeg exited with error: " + err.Error(), ExitCode: exitCode}
+// 	}
+
+// 	if stderrBuffer.Len() > 0 {
+// 		msgChannel <- FrameMsg{Error: "FFmpeg STDERR: " + stderrBuffer.String()}
+// 	}
+
+// 	// Signal that the process has exited
+// 	// msgChannel <- FrameMsg{Exited: true, ExitCode: exitCode}
+// }
+
+func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
+	cmd := exec.Command(
+		"ffmpeg",
+		"-rtsp_transport", "tcp",
+		"-re",
+		"-i", rtspURL,
+		"-analyzeduration", "1000000",
+		"-probesize", "1000000",
+		"-vf", `select=not(mod(n\,5))`,
+		"-fps_mode", "vfr",
+		"-c:v", "png",
+		"-f", "image2pipe",
+		"-",
+	)
 	stderrBuffer := &bytes.Buffer{}
 	cmd.Stderr = stderrBuffer
 
@@ -506,6 +590,7 @@ func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
 		msgChannel <- FrameMsg{Error: err.Error()}
 		return
 	}
+	defer pipe.Close()
 
 	err = cmd.Start()
 	if err != nil {
@@ -513,43 +598,53 @@ func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
 		return
 	}
 
-	reader := io.Reader(pipe)
-	buffer := make([]byte, 14) // BMP header size
+	frameCount := 0
+	frameData := bytes.NewBuffer(nil)
+	isFrameStarted := false
 
+	buffer := make([]byte, 8192) // Buffer size
 	for {
-		_, err := io.ReadFull(reader, buffer)
-		if err != nil {
-			if err != io.EOF {
-				msgChannel <- FrameMsg{Error: err.Error()}
-			}
+		n, err := pipe.Read(buffer)
+		if err == io.EOF {
 			break
-		}
-
-		if buffer[0] != 'B' || buffer[1] != 'M' {
-			msgChannel <- FrameMsg{Error: "Not a BMP file"}
-			continue
-		}
-
-		fileSize := binary.LittleEndian.Uint32(buffer[2:6])
-		fileBuffer := make([]byte, fileSize-14)
-		_, err = io.ReadFull(reader, fileBuffer)
-		if err != nil {
+		} else if err != nil {
 			msgChannel <- FrameMsg{Error: err.Error()}
-			continue
+			return
 		}
 
-		imageBuffer := append(buffer, fileBuffer...)
-		img, err := bmp.Decode(bytes.NewReader(imageBuffer))
-		if err != nil {
-			msgChannel <- FrameMsg{Error: err.Error()}
-			continue
+		frameData.Write(buffer[:n])
+
+		if bytes.HasPrefix(frameData.Bytes(), []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}) {
+			isFrameStarted = true
 		}
 
-		msgChannel <- FrameMsg{Frame: img}
+		if isFrameStarted && bytes.HasSuffix(frameData.Bytes(), []byte{0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82}) {
+			img, err := png.Decode(bytes.NewReader(frameData.Bytes()))
+			if err != nil {
+				msgChannel <- FrameMsg{Error: "Failed to decode PNG: " + err.Error()}
+			} else {
+				msgChannel <- FrameMsg{Frame: img}
+			}
+
+			frameCount++
+			frameData.Reset()
+			isFrameStarted = false
+		}
+
+		if frameData.Len() > 2*1024*1024 {
+			startIdx := bytes.Index(frameData.Bytes(), []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A})
+			if startIdx != -1 {
+				frameData.Next(startIdx)
+				isFrameStarted = true
+			} else {
+				frameData.Reset()
+				isFrameStarted = false
+			}
+		}
 	}
 
 	err = cmd.Wait()
-	exitCode := 0 // Default exit code if no error occurred
+	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
@@ -562,9 +657,6 @@ func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
 	if stderrBuffer.Len() > 0 {
 		msgChannel <- FrameMsg{Error: "FFmpeg STDERR: " + stderrBuffer.String()}
 	}
-
-	// Signal that the process has exited
-	// msgChannel <- FrameMsg{Exited: true, ExitCode: exitCode}
 }
 
 func recordRTSPStream(rtspURL string, controlChannel <-chan RecordMsg, prebufferDuration time.Duration) {
@@ -665,7 +757,17 @@ func recodeToMP4(inputFile string) (string, error) {
 	var cmd *exec.Cmd
 	// Create the FFmpeg command
 	if globalConfig.Video.OnlyRemuxMp4 {
-		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c", "copy", "-hls_segment_type", "fmp4", outputFile)
+		if runtimeConfig.CodecName == "hevc" {
+			cmd = exec.Command("ffmpeg", "-i", inputFile,
+				"-c:v", "copy",
+				"-c:a", "aac",
+				"-tag:v", "hvc1",
+				"-movflags", "+faststart",
+				"-hls_segment_type", "fmp4",
+				outputFile)
+		} else {
+			cmd = exec.Command("ffmpeg", "-i", inputFile, "-c", "copy", outputFile)
+		}
 	} else {
 		cmd = exec.Command("ffmpeg", "-i", inputFile, "-c:v", "libx264", "-c:a", "aac", outputFile)
 	}
@@ -680,6 +782,7 @@ func recodeToMP4(inputFile string) (string, error) {
 }
 
 func main() {
+	ptime := prettyTimer.NewTimingStats()
 	// Check if there is a config file argument, if there isnt give error and exit
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Not enough arguments provided\n")
@@ -717,6 +820,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error starting server: %v\n", err)
 			return
 		}
+		os.Exit(1)
 	case "-v", "--version", "v":
 		// Print version
 		fmt.Println(Version)
@@ -765,6 +869,7 @@ func main() {
 		for index, stream := range hiResStreamInfo.Streams {
 			if stream.CodecType == "video" {
 				streamIndex = index
+				runtimeConfig.CodecName = stream.CodecName
 				if globalConfig.Video.OnlyRemuxMp4 {
 					if stream.CodecName != "h264" {
 						Log("warning", fmt.Sprintf("OnlyRemuxMp4 is enabled but the stream codec is not h264 or h265. Your videos may not play in WebUI. Codec: %s", stream.CodecName))
@@ -910,6 +1015,8 @@ func main() {
 			Log("warning", "Restarting LO RTSP feed")
 		}
 	}(frameChannel)
+	// go dumpRtspFrames(globalConfig.DeviceUrl, "/Volumes/RAMDisk/", 4) // 1 means mod every nTh frame
+	// go readFramesFromRam(frameChannel, "/Volumes/RAMDisk/")
 
 	for msg := range frameChannel {
 		if msg.Error != "" {
@@ -918,6 +1025,8 @@ func main() {
 		}
 
 		if msg.Frame != nil {
+			ptime.Start()
+
 			rgba, ok := msg.Frame.(*image.RGBA)
 			if !ok {
 				// Convert to RGBA if it's not already
@@ -964,41 +1073,41 @@ func main() {
 					}
 
 					// Notify in realtime about detected objects
-					type Event struct {
-						Type                string          `json:"type"`
-						Timestamp           time.Time       `json:"timestamp"`
-						MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
-						ID                  string          `json:"id"`
-						MotionStart         time.Time       `json:"motion_start"`
-						MotionEnd           time.Time       `json:"motion_end"`
-						Objects             []TrackedObject `json:"objects"`
-						RecodedToMp4        bool            `json:"recoded_to_mp4"`
-						Snapshots           []string        `json:"snapshots"`
-						VideoFile           string          `json:"video_file"`
-						CameraName          string          `json:"camera_name"`
-						MetadataPath        string          `json:"metadata_path"`
-					}
+					// type Event struct {
+					// 	Type                string          `json:"type"`
+					// 	Timestamp           time.Time       `json:"timestamp"`
+					// 	MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
+					// 	ID                  string          `json:"id"`
+					// 	MotionStart         time.Time       `json:"motion_start"`
+					// 	MotionEnd           time.Time       `json:"motion_end"`
+					// 	Objects             []TrackedObject `json:"objects"`
+					// 	RecodedToMp4        bool            `json:"recoded_to_mp4"`
+					// 	Snapshots           []string        `json:"snapshots"`
+					// 	VideoFile           string          `json:"video_file"`
+					// 	CameraName          string          `json:"camera_name"`
+					// 	MetadataPath        string          `json:"metadata_path"`
+					// }
 
-					eventRaw := Event{
-						Type:                "motion_ended",
-						Timestamp:           time.Now(),
-						MotionTriggeredLast: runtimeConfig.MotionTriggeredLast,
-						ID:                  runtimeConfig.MotionVideo.ID,
-						MotionStart:         runtimeConfig.MotionVideo.MotionStart,
-						MotionEnd:           runtimeConfig.MotionVideo.MotionEnd,
-						Objects:             runtimeConfig.MotionVideo.Objects,
-						RecodedToMp4:        runtimeConfig.MotionVideo.RecodedToMp4,
-						Snapshots:           runtimeConfig.MotionVideo.Snapshots,
-						VideoFile:           runtimeConfig.MotionVideo.VideoFile,
-						CameraName:          runtimeConfig.MotionVideo.CameraName,
-						MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)),
-					}
-					eventJson, err := json.Marshal(eventRaw)
-					if err != nil {
-						Log("error", fmt.Sprintf("Error marshalling motion_ended event: %v", err))
-						return
-					}
-					eventHandler("motion_end", eventJson)
+					// eventRaw := Event{
+					// 	Type:                "motion_ended",
+					// 	Timestamp:           time.Now(),
+					// 	MotionTriggeredLast: runtimeConfig.MotionTriggeredLast,
+					// 	ID:                  runtimeConfig.MotionVideo.ID,
+					// 	MotionStart:         runtimeConfig.MotionVideo.MotionStart,
+					// 	MotionEnd:           runtimeConfig.MotionVideo.MotionEnd,
+					// 	Objects:             runtimeConfig.MotionVideo.Objects,
+					// 	RecodedToMp4:        runtimeConfig.MotionVideo.RecodedToMp4,
+					// 	Snapshots:           runtimeConfig.MotionVideo.Snapshots,
+					// 	VideoFile:           runtimeConfig.MotionVideo.VideoFile,
+					// 	CameraName:          runtimeConfig.MotionVideo.CameraName,
+					// 	MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)),
+					// }
+					// eventJson, err := json.Marshal(eventRaw)
+					// if err != nil {
+					// 	Log("error", fmt.Sprintf("Error marshalling motion_ended event: %v", err))
+					// 	return
+					// }
+					// eventHandler("motion_end", eventJson)
 
 					// 	// Clear the whole runtimeConfig.MotionVideo struct
 					runtimeConfig.MotionVideo = VideoMetadata{}
@@ -1007,91 +1116,91 @@ func main() {
 					runtimeConfig.MotionMutex.Unlock()
 				}
 
-				// Python motion detection
-				if predictFrameCounter%everyNthFrame == 0 {
-					if predictFrameCounter > 10000 {
-						predictFrameCounter = 0
-					}
-					// Only run this on every 5th frame
-					if msg.Frame != nil {
+				// Only run this on every Nth frame
+				if msg.Frame != nil {
 
-						var predict []Prediction
-						var err error
-						// If globalConfig.Motion.OnnxModel is blank run this
-						// Send data to objectPredict
-						if globalConfig.Motion.OnnxModel == "" {
-							predict, err = objectPredict(msg.Frame)
-							if err != nil {
-								Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
-								return
-							}
-						} else {
-							timer := time.Now()
-							objects, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
-							if err != nil {
-								fmt.Println("Cannot predict:", err)
-								return
-							}
-
-							// Detect took
-							took := time.Since(timer).Milliseconds()
-
-							for _, object := range objects {
-								pred := Prediction{
-									Object:     object.ClassID,
-									ClassName:  object.ClassName,
-									Box:        []float32{object.X1, object.Y1, object.X2, object.Y2},
-									Top:        int(object.Y1),
-									Bottom:     int(object.Y2),
-									Left:       int(object.X1),
-									Right:      int(object.X2),
-									Confidence: object.Confidence,
-									Took:       float64(took),
-								}
-								predict = append(predict, pred)
-							}
-
+					var predict []Prediction
+					var err error
+					// If globalConfig.Motion.OnnxModel is blank run this
+					// Send data to objectPredict
+					if globalConfig.Motion.OnnxModel == "" {
+						predict, err = objectPredict(msg.Frame)
+						if err != nil {
+							Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
+							return
 						}
-						calcInferenceStats(predict) // Calculate inference stats
-
-						if len(predict) > 0 {
-							// Notify in realtime about detected objects
-							type Event struct {
-								Type             string       `json:"type"`
-								Timestamp        time.Time    `json:"timestamp"`
-								PredictedObjects []Prediction `json:"predicted_objects"`
-							}
-
-							eventRaw := Event{
-								Type:             "objects_predicted",
-								Timestamp:        time.Now(),
-								PredictedObjects: predict,
-							}
-							eventJson, err := json.Marshal(eventRaw)
-							if err != nil {
-								Log("error", fmt.Sprintf("Error marshalling object_predicted event: %v", err))
-								return
-							}
-							eventHandler("objects_detected", eventJson)
-						}
-
 						performDetectionOnObject(rgba, predict)
-					}
-				}
-				predictFrameCounter++
+					} else {
+						timer := time.Now()
+						objects, resizedImage, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
+						if err != nil {
+							fmt.Println("Cannot predict:", err)
+							return
+						}
 
-				if globalConfig.EnableOutputStream {
-					streamImage(rgba, stream) // Stream the image to the web
+						// Detect took
+						took := time.Since(timer).Milliseconds()
+
+						for _, object := range objects {
+							pred := Prediction{
+								Object:     object.ClassID,
+								ClassName:  object.ClassName,
+								Box:        []float32{object.X1, object.Y1, object.X2, object.Y2},
+								Top:        int(object.Y1),
+								Bottom:     int(object.Y2),
+								Left:       int(object.X1),
+								Right:      int(object.X2),
+								Confidence: object.Confidence,
+								Took:       float64(took),
+							}
+							predict = append(predict, pred)
+						}
+						performDetectionOnObject(resizedImage, predict)
+					}
+					calcInferenceStats(predict) // Calculate inference stats
+
+					// FIX THIS Its taking way too long to process
+					// if len(predict) > 0 {
+					// 	// Notify in realtime about detected objects
+					// 	type Event struct {
+					// 		Type             string       `json:"type"`
+					// 		Timestamp        time.Time    `json:"timestamp"`
+					// 		PredictedObjects []Prediction `json:"predicted_objects"`
+					// 	}
+
+					// 	eventRaw := Event{
+					// 		Type:             "objects_predicted",
+					// 		Timestamp:        time.Now(),
+					// 		PredictedObjects: predict,
+					// 	}
+					// 	eventJson, err := json.Marshal(eventRaw)
+					// 	if err != nil {
+					// 		Log("error", fmt.Sprintf("Error marshalling object_predicted event: %v", err))
+					// 		return
+					// 	}
+					// 	go eventHandler("objects_detected", eventJson)
+					// }
+
+					// if len(predict) > 0 {
+					// 	fname := fmt.Sprintf("%d.jpg", predictFrameCounter)
+					// 	saveJPEG(filepath.Join(globalConfig.Video.HiResPath, fname), rgba, 100)
+					// }
+
 				}
-			} else {
-				if globalConfig.EnableOutputStream {
-					streamImage(rgba, stream) // Stream the image to the web
-				}
+
+				predictFrameCounter++
 			}
+
+			// if globalConfig.EnableOutputStream {
+			// 	streamImage(rgba, stream) // Stream the image to the web
+			// }
 
 			imgLast = rgba
 			// Cleanup
 			// img.Close()
+			ptime.Finish() // End timer
+			// ptime.PrintStats()
+
 		}
 	}
 
@@ -1228,13 +1337,13 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 
 			// Log("error", fmt.Sprintf("STORED %d OBJECTS", len(runtimeConfig.MotionVideo.Objects)))
 
-			drawRectangle(frame, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
+			ob.DrawRectangle(frame, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
 
 			pt := image.Pt(predict.Left, predict.Top-5)
 			if predict.Top-5 < 0 {
 				pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
 			}
-			addLabelWithTTF(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
+			ob.AddLabelWithTTF(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
 
 			// Store snapshot of the object
 			if runtimeConfig.MotionVideo.ID != "" {
@@ -1288,7 +1397,7 @@ func streamImage(img *image.RGBA, stream *mjpeg.Stream) {
 		for _, ignoreAreaClass := range globalConfig.IgnoreAreasClasses {
 			// Draw the ignore area
 			rect := image.Rect(ignoreAreaClass.Left, ignoreAreaClass.Top, ignoreAreaClass.Right, ignoreAreaClass.Bottom)
-			drawRectangle(img, rect, color.RGBA{255, 0, 0, 0}, 2)
+			ob.DrawRectangle(img, rect, color.RGBA{255, 0, 0, 0}, 2)
 		}
 	}
 
@@ -1314,93 +1423,6 @@ func startWebcamStream(stream *mjpeg.Stream) {
 	}
 
 	log.Fatal(server.ListenAndServe())
-}
-
-func getClass(id int) string {
-	classes := map[int]string{
-		1:  "person",
-		2:  "bicycle",
-		3:  "car",
-		4:  "motorcycle",
-		5:  "airplane",
-		6:  "bus",
-		7:  "train",
-		8:  "truck",
-		9:  "boat",
-		10: "traffic light",
-		11: "fire hydrant",
-		13: "stop sign",
-		14: "parking meter",
-		15: "bench",
-		16: "bird",
-		17: "cat",
-		18: "dog",
-		19: "horse",
-		20: "sheep",
-		21: "cow",
-		22: "elephant",
-		23: "bear",
-		24: "zebra",
-		25: "giraffe",
-		27: "backpack",
-		28: "umbrella",
-		31: "handbag",
-		32: "tie",
-		33: "suitcase",
-		34: "frisbee",
-		35: "skis",
-		36: "snowboard",
-		37: "sports ball",
-		38: "kite",
-		39: "baseball bat",
-		40: "baseball glove",
-		41: "skateboard",
-		42: "surfboard",
-		43: "tennis racket",
-		44: "bottle",
-		46: "wine glass",
-		47: "cup",
-		48: "fork",
-		49: "knife",
-		50: "spoon",
-		51: "bowl",
-		52: "banana",
-		53: "apple",
-		54: "sandwich",
-		55: "orange",
-		56: "broccoli",
-		57: "carrot",
-		58: "hot dog",
-		59: "pizza",
-		60: "donut",
-		61: "cake",
-		62: "chair",
-		63: "couch",
-		64: "potted plant",
-		65: "bed",
-		67: "dining table",
-		70: "toilet",
-		72: "tv",
-		73: "laptop",
-		74: "mouse",
-		75: "remote",
-		76: "keyboard",
-		77: "cell phone",
-		78: "microwave",
-		79: "oven",
-		80: "toaster",
-		81: "sink",
-		82: "refrigerator",
-		84: "book",
-		85: "clock",
-		86: "vase",
-		87: "scissors",
-		88: "teddy bear",
-		89: "hair drier",
-		90: "toothbrush",
-	}
-
-	return classes[id]
 }
 
 func establishConnection() error {
@@ -1809,58 +1831,47 @@ func generateRandomString(length int) string {
 	return string(b)
 }
 
-func addLabelWithTTF(img draw.Image, text string, pt image.Point, textColor color.Color, fontSize float64) {
-	// fontBytes, err := os.ReadFile(fontPath)
-	// if err != nil {
-	// 	log.Printf("Error reading font file: %v", err)
-	// 	return
-	// }
+// func addLabelWithTTF(img draw.Image, text string, pt image.Point, textColor color.Color, fontSize float64) {
 
-	// fontType, err := freetype.ParseFont(fontBytes)
-	// if err != nil {
-	// 	log.Printf("Error parsing font: %v", err)
-	// 	return
-	// }
+// 	// Set up the freetype context to draw the text
+// 	c := freetype.NewContext()
+// 	c.SetDPI(72)
+// 	c.SetFont(runtimeConfig.TextFont)
+// 	c.SetFontSize(fontSize)
+// 	c.SetClip(img.Bounds())
+// 	c.SetDst(img)
+// 	c.SetSrc(image.NewUniform(textColor))
 
-	// Set up the freetype context to draw the text
-	c := freetype.NewContext()
-	c.SetDPI(72)
-	c.SetFont(runtimeConfig.TextFont)
-	c.SetFontSize(fontSize)
-	c.SetClip(img.Bounds())
-	c.SetDst(img)
-	c.SetSrc(image.NewUniform(textColor))
+// 	// Draw the text
+// 	_, err := c.DrawString(text, fixed.Point26_6{
+// 		X: fixed.I(pt.X),
+// 		Y: fixed.I(pt.Y),
+// 	})
+// 	if err != nil {
+// 		log.Printf("Error drawing string: %v", err)
+// 	}
+// }
 
-	// Draw the text
-	_, err := c.DrawString(text, fixed.Point26_6{
-		X: fixed.I(pt.X),
-		Y: fixed.I(pt.Y),
-	})
-	if err != nil {
-		log.Printf("Error drawing string: %v", err)
-	}
-}
-
-func drawRectangle(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
-	for i := 0; i < thickness; i++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			for y := rect.Min.Y + i; y < rect.Min.Y+i+1; y++ {
-				img.Set(x, y, col) // Top border
-			}
-			for y := rect.Max.Y - i - 1; y < rect.Max.Y-i; y++ {
-				img.Set(x, y, col) // Bottom border
-			}
-		}
-		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-			for x := rect.Min.X + i; x < rect.Min.X+i+1; x++ {
-				img.Set(x, y, col) // Left border
-			}
-			for x := rect.Max.X - i - 1; x < rect.Max.X-i; x++ {
-				img.Set(x, y, col) // Right border
-			}
-		}
-	}
-}
+// func drawRectangle(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
+// 	for i := 0; i < thickness; i++ {
+// 		for x := rect.Min.X; x < rect.Max.X; x++ {
+// 			for y := rect.Min.Y + i; y < rect.Min.Y+i+1; y++ {
+// 				img.Set(x, y, col) // Top border
+// 			}
+// 			for y := rect.Max.Y - i - 1; y < rect.Max.Y-i; y++ {
+// 				img.Set(x, y, col) // Bottom border
+// 			}
+// 		}
+// 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+// 			for x := rect.Min.X + i; x < rect.Min.X+i+1; x++ {
+// 				img.Set(x, y, col) // Left border
+// 			}
+// 			for x := rect.Max.X - i - 1; x < rect.Max.X-i; x++ {
+// 				img.Set(x, y, col) // Right border
+// 			}
+// 		}
+// 	}
+// }
 
 func CountChangedPixels(img1, img2 *image.RGBA, threshold uint8) int {
 	if img1.Bounds() != img2.Bounds() {
@@ -1942,9 +1953,7 @@ func calcInferenceStats(predict []Prediction) {
 		return
 	}
 
-	// fmt.Printf("PREDICT LEN: %d\n", len(predict))
 	for _, prediction := range predict {
-		// fmt.Printf("TOOK: %f\n", prediction.Took)
 		if prediction.Took > float64(1000/everyNthFrame) {
 			Log("warning", fmt.Sprintf("Inference took %fms, max ceiling should be: %dms", prediction.Took, 1000/everyNthFrame))
 		}
@@ -1962,17 +1971,8 @@ func calcInferenceStats(predict []Prediction) {
 	}
 
 	stats.Avg = stats.Avg / float64(count)
-	// fmt.Printf("AVG_PRE: %f COUNT: %f\n", stats.Avg, float64(count))
 
 	runtimeConfig.InferenceTimingBuffer = append(runtimeConfig.InferenceTimingBuffer, stats)
-	// fmt.Printf("ADDING_VALS: %v\n", stats)
-
-	// Check the entire buffer for NaN values
-	// for i, bufStats := range runtimeConfig.InferenceTimingBuffer {
-	// 	if math.IsNaN(bufStats.Avg) {
-	// 		fmt.Printf("FOUND NaN AT INDEX %d IN BUFFER: %v\n", i, bufStats)
-	// 	}
-	// }
 
 	if len(runtimeConfig.InferenceTimingBuffer) >= interenceAvgInterval {
 		statsFinal := InferenceStats{}
@@ -1980,18 +1980,6 @@ func calcInferenceStats(predict []Prediction) {
 		statsFinal.Max = 0 // Initialize Max to 0
 		// Calculate avg inference time
 		for _, inferenceTime := range runtimeConfig.InferenceTimingBuffer {
-			// Check of any of the values are NaN and print which one is
-			// if math.IsNaN(inferenceTime.Avg) {
-			// 	Log("error", fmt.Sprintf("inferenceTime.Avg is NaN"))
-			// 	fmt.Printf("VALUE: %f\n", inferenceTime.Avg)
-			// }
-			// if math.IsNaN(inferenceTime.Min) {
-			// 	Log("error", fmt.Sprintf("inferenceTime.Min is NaN"))
-			// }
-			// if math.IsNaN(inferenceTime.Max) {
-			// 	Log("error", fmt.Sprintf("inferenceTime.Max is NaN"))
-			// }
-
 			statsFinal.Avg += inferenceTime.Avg
 			if inferenceTime.Min < statsFinal.Min {
 				statsFinal.Min = inferenceTime.Min
@@ -2002,9 +1990,7 @@ func calcInferenceStats(predict []Prediction) {
 			}
 		}
 
-		// fmt.Printf("AVG_B: %f LEN: %d\n", statsFinal.Avg, len(runtimeConfig.InferenceTimingBuffer))
 		statsFinal.Avg = statsFinal.Avg / float64(len(runtimeConfig.InferenceTimingBuffer))
-		// fmt.Printf("AVG_A: %f\n", statsFinal.Avg)
 
 		// Log avg inference time
 		type Event struct {
@@ -2027,17 +2013,6 @@ func calcInferenceStats(predict []Prediction) {
 		eventJson, err := json.Marshal(eventRaw)
 		if err != nil {
 			Log("error", fmt.Sprintf("Error marshalling inference_avg event: %v: Event: %v", err, eventRaw))
-			// If one of the values is NaN print which one it is
-			// if math.IsNaN(statsFinal.Avg) {
-			// 	Log("error", fmt.Sprintf("stats.Avg is NaN"))
-			// }
-			// if math.IsNaN(statsFinal.Min) {
-			// 	Log("error", fmt.Sprintf("stats.Min is NaN"))
-			// }
-			// if math.IsNaN(statsFinal.Max) {
-			// 	Log("error", fmt.Sprintf("stats.Max is NaN"))
-			// }
-
 			return
 		}
 		eventHandler("inference_avg", eventJson)

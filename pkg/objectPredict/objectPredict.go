@@ -9,8 +9,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"io/fs"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -19,11 +22,17 @@ import (
 	"sync"
 
 	onnx "github.com/8ff/onnxruntime_go"
+	"github.com/goki/freetype"
 	"github.com/nfnt/resize"
+	"golang.org/x/image/draw"
+	"golang.org/x/image/math/fixed"
 )
 
 //go:embed models
 var models embed.FS
+
+//go:embed fonts
+var fonts embed.FS
 
 //go:embed lib.tgz
 var lib []byte
@@ -154,19 +163,19 @@ func Init(opt Config) (*Client, error) {
 	return &client, nil
 }
 
-func (c *Client) Predict(imgRaw image.Image) ([]Object, error) {
-	input, img_width, img_height := c.prepareInput(imgRaw)
+func (c *Client) Predict(imgRaw image.Image) ([]Object, *image.RGBA, error) {
+	input, img_width, img_height, resizedImage := c.prepareInput(imgRaw)
 	inputTensor := c.RuntimeSession.Input.GetData()
 
 	// inTensor := modelSes.Input.GetData()
 	copy(inputTensor, input)
 	err := c.RuntimeSession.Session.Run()
 	if err != nil {
-		return nil, fmt.Errorf("error running session: %w", err)
+		return nil, nil, fmt.Errorf("error running session: %w", err)
 	}
 
 	objects := processOutput(c.RuntimeSession.Output.GetData(), img_width, img_height)
-	return objects, nil
+	return objects, resizedImage, nil
 }
 
 func (c *Client) initSession() (ModelSession, error) {
@@ -207,7 +216,7 @@ func (c *Client) initSession() (ModelSession, error) {
 
 	// Create and prepare a blank image
 	blankImage := CreateBlankImage(c.ModelWidth, c.ModelHeight)
-	input, _, _ := c.prepareInput(blankImage)
+	input, _, _, _ := c.prepareInput(blankImage)
 
 	inputShape := onnx.NewShape(1, 3, 640, 640)
 	inputTensor, err := onnx.NewTensor(inputShape, input)
@@ -232,7 +241,7 @@ func (c *Client) initSession() (ModelSession, error) {
 	}, nil
 }
 
-func (c *Client) prepareInput(imageObj image.Image) ([]float32, int64, int64) {
+func (c *Client) prepareInputV1(imageObj image.Image) ([]float32, int64, int64) {
 	// Get the original image size
 	imageSize := imageObj.Bounds().Size()
 	imageWidth, imageHeight := int64(imageSize.X), int64(imageSize.Y)
@@ -295,6 +304,84 @@ func (c *Client) prepareInput(imageObj image.Image) ([]float32, int64, int64) {
 	wg.Wait()
 
 	return inputArray, imageWidth, imageHeight
+}
+
+func (c *Client) prepareInput(imageObj image.Image) ([]float32, int64, int64, *image.RGBA) {
+	// Get the original image size
+	imageSize := imageObj.Bounds().Size()
+	imageWidth, imageHeight := int64(imageSize.X), int64(imageSize.Y)
+
+	// Calculate new dimensions to preserve aspect ratio
+	ratio := math.Min(float64(c.ModelWidth)/float64(imageWidth), float64(c.ModelHeight)/float64(imageHeight))
+	newWidth := int(float64(imageWidth) * ratio)
+	newHeight := int(float64(imageHeight) * ratio)
+
+	// Create a new image with the model dimensions and fill it with a black background
+	paddedImage := image.NewRGBA(image.Rect(0, 0, c.ModelWidth, c.ModelHeight))
+	black := color.RGBA{0, 0, 0, 255}
+	draw.Draw(paddedImage, paddedImage.Bounds(), &image.Uniform{black}, image.Point{}, draw.Src)
+
+	// Resize the original image
+	resizedImage := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	draw.CatmullRom.Scale(resizedImage, resizedImage.Bounds(), imageObj, imageObj.Bounds(), draw.Over, nil)
+
+	// Calculate where to paste the resized image onto the black background
+	dx := (c.ModelWidth - newWidth) / 2
+	dy := (c.ModelHeight - newHeight) / 2
+
+	rect := image.Rect(dx, dy, newWidth+dx, newHeight+dy)
+	draw.Draw(paddedImage, rect, resizedImage, image.Point{0, 0}, draw.Over)
+
+	// Initialize slice to store the final input, pre-allocate memory
+	totalPixels := c.ModelWidth * c.ModelHeight
+	inputArray := make([]float32, totalPixels*3)
+
+	// Initialize a WaitGroup to track the completion of goroutines
+	var wg sync.WaitGroup
+
+	// Define number of goroutines to use
+	numGoroutines := runtime.NumCPU()
+
+	// Calculate rows per goroutine
+	rowsPerGoroutine := c.ModelHeight / numGoroutines
+
+	for i := 0; i < numGoroutines; i++ {
+		// Calculate the start and end rows for this goroutine
+		startY := i * rowsPerGoroutine
+		endY := (i + 1) * rowsPerGoroutine
+		if i == numGoroutines-1 {
+			endY = c.ModelHeight
+		}
+
+		wg.Add(1)
+
+		go func(startY, endY int) {
+			defer wg.Done()
+
+			var pixelColor color.Color
+			var r, g, b uint32
+
+			for y := startY; y < endY; y++ {
+				for x := 0; x < c.ModelWidth; x++ {
+					pixelColor = paddedImage.At(x, y)
+					r, g, b, _ = pixelColor.RGBA()
+
+					redIdx := y*c.ModelWidth + x
+					greenIdx := redIdx + c.ModelWidth*c.ModelHeight
+					blueIdx := greenIdx + c.ModelWidth*c.ModelHeight
+
+					inputArray[redIdx] = float32(r/257) / 255.0
+					inputArray[greenIdx] = float32(g/257) / 255.0
+					inputArray[blueIdx] = float32(b/257) / 255.0
+				}
+			}
+		}(startY, endY)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	return inputArray, int64(c.ModelWidth), int64(c.ModelHeight), paddedImage
 }
 
 func processOutput(output []float32, imgWidth, imgHeight int64) []Object {
@@ -574,4 +661,115 @@ func CreateBlankImage(width, height int) image.Image {
 	}
 
 	return img
+}
+
+// ***** Helper Functions *****
+
+// DrawRectangle draws a rectangle on an image
+func DrawRectangle(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
+	for i := 0; i < thickness; i++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			for y := rect.Min.Y + i; y < rect.Min.Y+i+1; y++ {
+				img.Set(x, y, col) // Top border
+			}
+			for y := rect.Max.Y - i - 1; y < rect.Max.Y-i; y++ {
+				img.Set(x, y, col) // Bottom border
+			}
+		}
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			for x := rect.Min.X + i; x < rect.Min.X+i+1; x++ {
+				img.Set(x, y, col) // Left border
+			}
+			for x := rect.Max.X - i - 1; x < rect.Max.X-i; x++ {
+				img.Set(x, y, col) // Right border
+			}
+		}
+	}
+}
+
+// ConvertToRGBA converts an image.Image to *image.RGBA
+func ConvertToRGBA(img image.Image) *image.RGBA {
+	// Create a new RGBA image with the same dimensions
+	rgba := image.NewRGBA(img.Bounds())
+
+	// Draw the original image onto the new RGBA image
+	draw.Draw(rgba, rgba.Bounds(), img, image.Point{}, draw.Src)
+
+	return rgba
+}
+
+// AddLabelWithTTF adds a label to an image using a TrueType font
+func AddLabelWithTTF(img draw.Image, text string, pt image.Point, textColor color.Color, fontSize float64) {
+	fontBytes, err := fonts.ReadFile("fonts/Changes.ttf")
+	if err != nil {
+		panic(err)
+	}
+
+	font, err := freetype.ParseFont(fontBytes)
+	if err != nil {
+		panic(err)
+	}
+	// Set up the freetype context to draw the text
+	c := freetype.NewContext()
+	c.SetDPI(72)
+	c.SetFont(font)
+	c.SetFontSize(fontSize)
+	c.SetClip(img.Bounds())
+	c.SetDst(img)
+	c.SetSrc(image.NewUniform(textColor))
+
+	// Draw the text
+	_, err = c.DrawString(text, fixed.Point26_6{
+		X: fixed.I(pt.X),
+		Y: fixed.I(pt.Y),
+	})
+	if err != nil {
+		log.Printf("Error drawing string: %v", err)
+	}
+}
+
+// SaveJPEG saves an image to a JPEG file
+func SaveJPEG(filename string, img *image.RGBA, quality int) {
+	file, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	options := &jpeg.Options{Quality: quality} // Quality ranges from 1 to 100
+	err = jpeg.Encode(file, img, options)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// SavePNG saves an image to a PNG file
+func SavePNG(filename string, img *image.RGBA) {
+	file, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	err = png.Encode(file, img)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// loadImage loads an image from a file. The image type can be either PNG or JPEG.
+func LoadImage(filename string) (image.Image, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	// Automatically detect the file format (JPEG, PNG, etc.)
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
 }

@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"os"
 	"time"
 
 	"github.com/8ff/firescrew/pkg/objectPredict"
 	"github.com/8ff/prettyTimer"
 )
 
-func main() {
+func bench(config objectPredict.Config, num int) {
 	filename := "a.jpg" // Replace this with the path to your PNG file
 	img, err := objectPredict.LoadImage(filename)
 	if err != nil {
@@ -18,7 +19,37 @@ func main() {
 		return
 	}
 
-	obj, err := objectPredict.Init(objectPredict.Config{Model: "yolov8s", EnableCoreMl: true})
+	obj, err := objectPredict.Init(config)
+	if err != nil {
+		fmt.Println("Cannot init model:", err)
+		return
+	}
+
+	defer obj.Close() // Cleanup files
+	stats := prettyTimer.NewTimingStats()
+
+	for i := 0; i < num; i++ {
+		start := time.Now()
+		_, _, err = obj.Predict(img)
+		if err != nil {
+			fmt.Println("Cannot predict:", err)
+			return
+		}
+		// End timer
+		stats.RecordTiming(time.Since(start))
+	}
+	stats.PrintStats()
+}
+
+func runExample() {
+	filename := "a.jpg" // Replace this with the path to your PNG file
+	img, err := objectPredict.LoadImage(filename)
+	if err != nil {
+		fmt.Println("Error loading image:", err)
+		return
+	}
+
+	obj, err := objectPredict.Init(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: true})
 	if err != nil {
 		fmt.Println("Cannot init model:", err)
 		return
@@ -51,8 +82,35 @@ func main() {
 		objectPredict.AddLabelWithTTF(frame, fmt.Sprintf("%s %.2f", object.ClassName, object.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
 	}
 
+	// Get original image dimensions
+	width, height := objectPredict.GetImageDimensions(img)
+	// Resize the image to the original dimensions
+	frame = objectPredict.RemovePadding(frame, width, height)
+
 	// Save the image once, after drawing all rectangles and labels
 	objectPredict.SaveJPEG("out.jpg", frame, 100)
 
 	stats.PrintStats()
+}
+
+func main() {
+	args := os.Args[1:]
+	if len(args) < 1 {
+		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda|run>")
+		return
+	}
+
+	switch args[0] {
+	case "bench_cpu":
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: false}, 5)
+	case "bench_coreml":
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: true, EnableCuda: false}, 5)
+	case "bench_cuda":
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: true}, 5)
+	case "run":
+		runExample()
+	default:
+		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda|run>")
+		return
+	}
 }

@@ -206,13 +206,29 @@ func (c *Client) initSession() (ModelSession, error) {
 	}
 	defer options.Destroy()
 
-	if c.EnableCoreMl { // If CoreML is enabled, append the CoreML execution provider
+	switch {
+	case c.EnableCoreMl: // If CoreML is enabled, append the CoreML execution provider
 		e = options.AppendExecutionProviderCoreML(0)
 		if e != nil {
 			options.Destroy()
 			return ModelSession{}, err
 		}
 		defer options.Destroy()
+	case c.EnableCuda: // If CUDA is enabled, append the CUDA execution provider
+		cudaOptions, err := onnx.NewCUDAProviderOptions()
+		if err != nil {
+			return ModelSession{}, fmt.Errorf("error creating CUDA provider options: %w", err)
+		}
+		defer cudaOptions.Destroy()
+
+		// This is a clunky API, but it reflects how the underlying C API sets CUDA options.
+		err = cudaOptions.Update(map[string]string{"device_id": "0"})
+		if err != nil {
+			return ModelSession{}, fmt.Errorf("error updating CUDA provider options: %w", err)
+		}
+
+		options.AppendExecutionProviderCUDA(cudaOptions) // Append the CUDA execution provider
+
 	}
 
 	// Create and prepare a blank image
@@ -713,4 +729,32 @@ func LoadImage(filename string) (image.Image, error) {
 	}
 
 	return img, nil
+}
+
+// GetImageDimensions returns the width and height of an image
+func GetImageDimensions(imageObj image.Image) (int, int) {
+	bounds := imageObj.Bounds()
+	width, height := bounds.Max.X, bounds.Max.Y
+	return width, height
+}
+
+// RemovePadding removes padding from the padded image and returns it to the original dimensions
+func RemovePadding(paddedImage *image.RGBA, originalWidth, originalHeight int) *image.RGBA {
+	// Calculate the ratio used for padding
+	ratio := math.Min(float64(paddedImage.Bounds().Dx())/float64(originalWidth), float64(paddedImage.Bounds().Dy())/float64(originalHeight))
+	newWidth := int(float64(originalWidth) * ratio)
+	newHeight := int(float64(originalHeight) * ratio)
+
+	// Calculate the location where the original image starts and ends within the padded image
+	dx := (paddedImage.Bounds().Dx() - newWidth) / 2
+	dy := (paddedImage.Bounds().Dy() - newHeight) / 2
+	rect := image.Rect(dx, dy, newWidth+dx, newHeight+dy)
+
+	// Create a new image to hold the unpadded version
+	unpaddedImage := image.NewRGBA(image.Rect(0, 0, originalWidth, originalHeight))
+
+	// Resize the section of the padded image that corresponds to the original image
+	draw.CatmullRom.Scale(unpaddedImage, unpaddedImage.Bounds(), paddedImage.SubImage(rect), rect, draw.Over, nil)
+
+	return unpaddedImage
 }

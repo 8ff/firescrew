@@ -986,7 +986,7 @@ func main() {
 								Log("error", fmt.Sprintf("Error running objectPredict: %v", err))
 								return
 							}
-							performDetectionOnObject(rgba, predict)
+							performDetectionOnObject(nil, rgba, predict)
 						} else {
 							timer := time.Now()
 							objects, resizedImage, err := runtimeConfig.ObjectPredictClient.Predict(msg.Frame)
@@ -1012,7 +1012,7 @@ func main() {
 								}
 								predict = append(predict, pred)
 							}
-							performDetectionOnObject(resizedImage, predict)
+							performDetectionOnObject(rgba, resizedImage, predict)
 						}
 						calcInferenceStats(predict) // Calculate inference stats
 
@@ -1063,9 +1063,8 @@ func main() {
 
 }
 
-func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
+func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, prediction []Prediction) {
 	now := time.Now()
-
 	for _, predict := range prediction {
 		// If class is not within LookForClasses, skip it
 		if len(globalConfig.Motion.LookForClasses) > 0 {
@@ -1206,6 +1205,13 @@ func performDetectionOnObject(frame *image.RGBA, prediction []Prediction) {
 			if runtimeConfig.MotionVideo.ID != "" {
 				snapshotFilename := fmt.Sprintf("snap_%s_%s.jpg", runtimeConfig.MotionVideo.ID, generateRandomString(4))
 				runtimeConfig.MotionVideo.Snapshots = append(runtimeConfig.MotionVideo.Snapshots, snapshotFilename)
+
+				if originalFrame != nil {
+					origWidth, origHeight := ob.GetImageDimensions(originalFrame)
+					// Resize the image to the original dimensions
+					frame = ob.RemovePadding(frame, origWidth, origHeight)
+				}
+
 				saveJPEG(filepath.Join(globalConfig.Video.HiResPath, snapshotFilename), frame, 100)
 			} else {
 				Log("warning", "runtimeConfig.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")

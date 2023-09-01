@@ -6,10 +6,10 @@ body {
 #promptInput {
     display: block;
     width: 50%;
-    max-width: 600px; /* This will ensure the input field does not become too large on wide screens */
-    margin: 0 auto; /* Centers the input field */
+    max-width: 600px;
+    margin: 0 auto;
     padding: 10px;
-    font-size: 16px;
+    font-size: 1rem;
     border-radius: 4px;
     border: 2px solid #444;
     background-color: #222;
@@ -22,14 +22,12 @@ body {
     border-color: #448aff;
 }
 
-
 .image-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 20px;
     padding: 20px;
     box-sizing: border-box;
-    /* max-width: 960px; */
     margin: 0 auto;
 }
 
@@ -49,17 +47,26 @@ body {
 
 /* The Modal (background) */
 .modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1; /* Sit on top */
-    padding-top: 50px; /* Location of the box */
+    display: none;
+    /* Hidden by default */
+    position: fixed;
+    /* Stay in place */
+    z-index: 1;
+    /* Sit on top */
+    padding-top: 50px;
+    /* Location of the box */
     left: 0;
     top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgb(0,0,0); /* Fallback color */
-    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    width: 100%;
+    /* Full width */
+    height: 100%;
+    /* Full height */
+    overflow: auto;
+    /* Enable scroll if needed */
+    background-color: rgb(0, 0, 0);
+    /* Fallback color */
+    background-color: rgba(0, 0, 0, 0.4);
+    /* Black w/ opacity */
 }
 
 /* Modal Content */
@@ -147,4 +154,29 @@ body {
 .objectIcon {
     color: rgba(255, 87, 0, 0.8);
     margin-top: 5px;
+}
+
+
+/* Media Queries */
+@media (max-width: 768px) {
+    #promptInput {
+        width: 90%;
+    }
+
+    .modal-content {
+        width: 100%;
+    }
+
+    .image-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .modal-content {
+        width: 100%;
+        max-width: 100%;
+        /* Ensures it never goes beyond the viewport */
+        margin: auto;
+        box-sizing: border-box;
+        /* Includes padding and border in the element's total width */
+    }
 }

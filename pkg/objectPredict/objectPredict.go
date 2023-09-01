@@ -23,7 +23,6 @@ import (
 
 	onnx "github.com/8ff/onnxruntime_go"
 	"github.com/goki/freetype"
-	"github.com/nfnt/resize"
 	"golang.org/x/image/draw"
 	"golang.org/x/image/math/fixed"
 )
@@ -239,71 +238,6 @@ func (c *Client) initSession() (ModelSession, error) {
 		Input:   inputTensor,
 		Output:  outputTensor,
 	}, nil
-}
-
-func (c *Client) prepareInputV1(imageObj image.Image) ([]float32, int64, int64) {
-	// Get the original image size
-	imageSize := imageObj.Bounds().Size()
-	imageWidth, imageHeight := int64(imageSize.X), int64(imageSize.Y)
-
-	// Resize the image to modelWidth*modelHeight only if it is not already of that size
-	var resizedImage image.Image
-	if imageWidth != int64(c.ModelWidth) || imageHeight != int64(c.ModelHeight) {
-		resizedImage = resize.Resize(uint(c.ModelWidth), uint(c.ModelHeight), imageObj, resize.Lanczos3)
-	} else {
-		resizedImage = imageObj
-	}
-
-	// Initialize slice to store the final input, pre-allocate memory
-	totalPixels := c.ModelWidth * c.ModelHeight
-	inputArray := make([]float32, totalPixels*3)
-
-	// Initialize a WaitGroup to track the completion of goroutines
-	var wg sync.WaitGroup
-
-	// Define number of goroutines to use
-	numGoroutines := runtime.NumCPU()
-
-	// Calculate rows per goroutine
-	rowsPerGoroutine := c.ModelHeight / numGoroutines
-
-	for i := 0; i < numGoroutines; i++ {
-		// Calculate the start and end rows for this goroutine
-		startY := i * rowsPerGoroutine
-		endY := (i + 1) * rowsPerGoroutine
-		if i == numGoroutines-1 {
-			endY = c.ModelHeight
-		}
-
-		wg.Add(1)
-
-		go func(startY, endY int) {
-			defer wg.Done()
-
-			var pixelColor color.Color
-			var r, g, b uint32
-
-			for y := startY; y < endY; y++ {
-				for x := 0; x < c.ModelWidth; x++ {
-					pixelColor = resizedImage.At(x, y)
-					r, g, b, _ = pixelColor.RGBA()
-
-					redIdx := y*c.ModelWidth + x
-					greenIdx := redIdx + c.ModelWidth*c.ModelHeight
-					blueIdx := greenIdx + c.ModelWidth*c.ModelHeight
-
-					inputArray[redIdx] = float32(r/257) / 255.0
-					inputArray[greenIdx] = float32(g/257) / 255.0
-					inputArray[blueIdx] = float32(b/257) / 255.0
-				}
-			}
-		}(startY, endY)
-	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-
-	return inputArray, imageWidth, imageHeight
 }
 
 func (c *Client) prepareInput(imageObj image.Image) ([]float32, int64, int64, *image.RGBA) {

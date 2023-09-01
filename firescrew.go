@@ -496,78 +496,6 @@ func CheckFFmpegAndFFprobe() (bool, error) {
 	return true, nil
 }
 
-// func processRTSPFeedOLD(rtspURL string, msgChannel chan<- FrameMsg) {
-// 	// cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-re", "-i", rtspURL, "-c:v", "bmp", "-f", "image2pipe", "-")
-// 	cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-re", "-i", rtspURL, "-analyzeduration", "1000000", "-probesize", "1000000", "-vf", "select=not(mod(n\\,5))", "-fps_mode", "vfr", "-c:v", "bmp", "-f", "image2pipe", "-")
-// 	stderrBuffer := &bytes.Buffer{}
-// 	cmd.Stderr = stderrBuffer
-
-// 	pipe, err := cmd.StdoutPipe()
-// 	if err != nil {
-// 		msgChannel <- FrameMsg{Error: err.Error()}
-// 		return
-// 	}
-
-// 	err = cmd.Start()
-// 	if err != nil {
-// 		msgChannel <- FrameMsg{Error: err.Error()}
-// 		return
-// 	}
-
-// 	reader := io.Reader(pipe)
-// 	buffer := make([]byte, 14) // BMP header size
-
-// 	for {
-// 		_, err := io.ReadFull(reader, buffer)
-// 		if err != nil {
-// 			if err != io.EOF {
-// 				msgChannel <- FrameMsg{Error: err.Error()}
-// 			}
-// 			break
-// 		}
-
-// 		if buffer[0] != 'B' || buffer[1] != 'M' {
-// 			msgChannel <- FrameMsg{Error: "Not a BMP file"}
-// 			continue
-// 		}
-
-// 		fileSize := binary.LittleEndian.Uint32(buffer[2:6])
-// 		fileBuffer := make([]byte, fileSize-14)
-// 		_, err = io.ReadFull(reader, fileBuffer)
-// 		if err != nil {
-// 			msgChannel <- FrameMsg{Error: err.Error()}
-// 			continue
-// 		}
-
-// 		imageBuffer := append(buffer, fileBuffer...)
-// 		img, err := bmp.Decode(bytes.NewReader(imageBuffer))
-// 		if err != nil {
-// 			msgChannel <- FrameMsg{Error: err.Error()}
-// 			continue
-// 		}
-
-// 		msgChannel <- FrameMsg{Frame: img}
-// 	}
-
-// 	err = cmd.Wait()
-// 	exitCode := 0 // Default exit code if no error occurred
-// 	if err != nil {
-// 		if exitErr, ok := err.(*exec.ExitError); ok {
-// 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
-// 				exitCode = status.ExitStatus()
-// 			}
-// 		}
-// 		msgChannel <- FrameMsg{Error: "FFmpeg exited with error: " + err.Error(), ExitCode: exitCode}
-// 	}
-
-// 	if stderrBuffer.Len() > 0 {
-// 		msgChannel <- FrameMsg{Error: "FFmpeg STDERR: " + stderrBuffer.String()}
-// 	}
-
-// 	// Signal that the process has exited
-// 	// msgChannel <- FrameMsg{Exited: true, ExitCode: exitCode}
-// }
-
 func processRTSPFeed(rtspURL string, msgChannel chan<- FrameMsg) {
 	cmd := exec.Command(
 		"ffmpeg",
@@ -1195,11 +1123,10 @@ func main() {
 			// 	streamImage(rgba, stream) // Stream the image to the web
 			// }
 
-			imgLast = rgba
-			// Cleanup
-			// img.Close()
-			ptime.Finish() // End timer
-			// ptime.PrintStats()
+			imgLast = rgba // Set the last image to the current image
+
+			ptime.Finish() // DEBUG TIMER
+			// ptime.PrintStats() // DEBUG TIMER
 
 		}
 	}
@@ -1528,87 +1455,6 @@ func objectPredict(imgRaw image.Image) ([]Prediction, error) {
 	}
 }
 
-// func startObjectDetector(scriptPath string) {
-// 	basePath := filepath.Dir(scriptPath)
-// 	restartCount := 0
-// 	pidFileName := filepath.Base(scriptPath) + ".pid"
-// 	pidFilePath := filepath.Join("/tmp", pidFileName)
-
-// 	// Try to read existing PID file
-// 	pidData, err := os.ReadFile(pidFilePath)
-// 	if err == nil {
-// 		pid, err := strconv.Atoi(string(pidData))
-// 		if err == nil {
-// 			process, err := os.FindProcess(pid)
-// 			if err == nil {
-// 				process.Kill() // Try to kill the existing process
-// 			}
-// 		}
-// 	}
-
-// 	for {
-// 		if restartCount > 3 {
-// 			Log("error", "Embedded python script failed 3 times, giving up")
-// 			os.Exit(1)
-// 		}
-
-// 		cmd := exec.Command("python3", "-u", scriptPath)
-// 		cmd.Dir = basePath
-
-// 		stdout, err := cmd.StdoutPipe()
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Error creating StdoutPipe for Cmd: %v", err))
-// 			continue
-// 		}
-
-// 		var stderr bytes.Buffer
-// 		cmd.Stderr = &stderr
-
-// 		Log("info", "Starting embedded python object server")
-// 		err = cmd.Start()
-
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Error starting Cmd: %v", err))
-// 			continue
-// 		}
-
-// 		// Write PID to file
-// 		err = os.WriteFile(pidFilePath, []byte(strconv.Itoa(cmd.Process.Pid)), 0644)
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Error writing PID to file: %v", err))
-// 			cmd.Process.Kill()
-// 			continue
-// 		}
-
-// 		go readOutput(stdout)
-
-// 		// Create a channel to catch signals to the process
-// 		c := make(chan os.Signal, 1)
-// 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-// 		go func() {
-// 			<-c
-// 			if cmd.Process != nil {
-// 				cmd.Process.Kill()
-// 			}
-// 			os.Remove(pidFilePath) // Remove PID file
-// 			os.Exit(1)
-// 		}()
-
-// 		err = cmd.Wait()
-
-// 		if err != nil {
-// 			Log("error", fmt.Sprintf("Embedded python script failed: %s", stderr.String()))
-// 		} else {
-// 			Log("info", "Embedded python script exited, restarting...")
-// 		}
-
-// 		os.Remove(pidFilePath) // Remove PID file
-
-// 		time.Sleep(2 * time.Second)
-// 		restartCount++
-// 	}
-// }
-
 func startObjectDetector(scriptPath string) {
 	basePath := filepath.Dir(scriptPath)
 	restartCount := 0
@@ -1751,7 +1597,6 @@ func copyAssetsToTemp() string {
 	}
 
 	for _, asset := range assets {
-		// fmt.Printf("ASSET: %s\n", asset.Name())
 
 		if asset.IsDir() {
 			continue
@@ -1778,39 +1623,6 @@ func copyAssetsToTemp() string {
 	return tempDir
 }
 
-// Function that stores embedded model files in a temp directory and sets globalConfig.ModelFile and globalConfig.ModelConfig to proper paths
-// func storeModelFiles() error {
-// 	tmpDir, err := os.MkdirTemp("", "models")
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create temp directory: %v", err)
-// 	}
-
-// 	modelFile := filepath.Join(tmpDir, "model.pb")
-// 	err = os.WriteFile(modelFile, embeddedModelFile, 0644)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to write model file: %v", err)
-// 	}
-
-// 	modelConfig := filepath.Join(tmpDir, "modelConfig.pbtxt")
-// 	err = os.WriteFile(modelConfig, embeddedModelConfig, 0644)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to write model config: %v", err)
-// 	}
-
-// 	globalConfig.ModelFile = modelFile
-// 	globalConfig.ModelConfig = modelConfig
-
-// 	c := make(chan os.Signal, 1)
-// 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-// 	go func() {
-// 		<-c
-// 		os.RemoveAll(tmpDir)
-// 		os.Exit(0)
-// 	}()
-
-// 	return nil
-// }
-
 // This function prints out embedded template.json file
 func printTemplateFile() {
 	fileBytes, err := assetsFs.ReadFile("assets/template.json")
@@ -1830,48 +1642,6 @@ func generateRandomString(length int) string {
 	}
 	return string(b)
 }
-
-// func addLabelWithTTF(img draw.Image, text string, pt image.Point, textColor color.Color, fontSize float64) {
-
-// 	// Set up the freetype context to draw the text
-// 	c := freetype.NewContext()
-// 	c.SetDPI(72)
-// 	c.SetFont(runtimeConfig.TextFont)
-// 	c.SetFontSize(fontSize)
-// 	c.SetClip(img.Bounds())
-// 	c.SetDst(img)
-// 	c.SetSrc(image.NewUniform(textColor))
-
-// 	// Draw the text
-// 	_, err := c.DrawString(text, fixed.Point26_6{
-// 		X: fixed.I(pt.X),
-// 		Y: fixed.I(pt.Y),
-// 	})
-// 	if err != nil {
-// 		log.Printf("Error drawing string: %v", err)
-// 	}
-// }
-
-// func drawRectangle(img *image.RGBA, rect image.Rectangle, col color.Color, thickness int) {
-// 	for i := 0; i < thickness; i++ {
-// 		for x := rect.Min.X; x < rect.Max.X; x++ {
-// 			for y := rect.Min.Y + i; y < rect.Min.Y+i+1; y++ {
-// 				img.Set(x, y, col) // Top border
-// 			}
-// 			for y := rect.Max.Y - i - 1; y < rect.Max.Y-i; y++ {
-// 				img.Set(x, y, col) // Bottom border
-// 			}
-// 		}
-// 		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-// 			for x := rect.Min.X + i; x < rect.Min.X+i+1; x++ {
-// 				img.Set(x, y, col) // Left border
-// 			}
-// 			for x := rect.Max.X - i - 1; x < rect.Max.X-i; x++ {
-// 				img.Set(x, y, col) // Right border
-// 			}
-// 		}
-// 	}
-// }
 
 func CountChangedPixels(img1, img2 *image.RGBA, threshold uint8) int {
 	if img1.Bounds() != img2.Bounds() {

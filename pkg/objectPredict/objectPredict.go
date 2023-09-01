@@ -47,6 +47,7 @@ type Config struct {
 
 type Client struct {
 	ModelPath      string
+	ModelBasePath  string
 	ModelWidth     int
 	ModelHeight    int
 	LibPath        string
@@ -119,6 +120,7 @@ func Init(opt Config) (*Client, error) {
 	if err != nil {
 		return &Client{}, err
 	}
+	client.ModelBasePath = modelTempPath // Set base path for extracted models so it can be cleaned up later
 
 	switch opt.Model {
 	case "yolov8n":
@@ -493,9 +495,12 @@ func extractTarGz(data []byte, dir string) error {
 }
 
 func extractLibs(data []byte, tempBasePath string) (string, error) {
-	// Create a temporary directory within the base path
-	tempDir, err := os.MkdirTemp(tempBasePath, "")
-	if err != nil {
+	// Remove if exists and recreate a dir named objectPredictLibs.f4fc215193baa83 in tempBasePath
+	tempDir := filepath.Join(tempBasePath, "objectPredictLibs.6171c35bdc")
+	if err := os.RemoveAll(tempDir); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
 		return "", err
 	}
 
@@ -508,9 +513,12 @@ func extractLibs(data []byte, tempBasePath string) (string, error) {
 }
 
 func extractModels(embedFS embed.FS, tempBasePath string) (string, error) {
-	// Create a temporary directory within the base path
-	tempDir, err := os.MkdirTemp(tempBasePath, "")
-	if err != nil {
+	// Remove if exists and recreate a dir named objectPredictLibs.f4fc215193baa83 in tempBasePath
+	tempDir := filepath.Join(tempBasePath, "objectPredictModels.a30da82de8eae8")
+	if err := os.RemoveAll(tempDir); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
 		return "", err
 	}
 
@@ -571,10 +579,9 @@ func (c *Client) Close() {
 	}
 
 	// Cleanup temp dir for model
-	if c.ModelPath != "" {
-		modelDir := filepath.Dir(c.ModelPath)
-		if err := os.RemoveAll(modelDir); err != nil {
-			fmt.Println("Warning: error removing ModelPath directory:", err)
+	if c.ModelBasePath != "" {
+		if err := os.RemoveAll(c.ModelBasePath); err != nil {
+			fmt.Println("Warning: error removing ModelBasePath:", err)
 		}
 	}
 

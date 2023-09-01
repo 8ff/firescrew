@@ -96,21 +96,21 @@ func runExample() {
 func main() {
 	args := os.Args[1:]
 	if len(args) < 1 {
-		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda|run>")
+		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda/gpu|run>")
 		return
 	}
 
 	switch args[0] {
 	case "bench_cpu":
-		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: false}, 5)
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: false}, 50)
 	case "bench_coreml":
-		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: true, EnableCuda: false}, 5)
-	case "bench_cuda":
-		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: true}, 5)
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: true, EnableCuda: false}, 50)
+	case "bench_cuda", "bench_gpu":
+		bench(objectPredict.Config{Model: "yolov8s", EnableCoreMl: false, EnableCuda: true}, 50)
 	case "run":
 		runExample()
 	default:
-		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda|run>")
+		fmt.Println("Usage: example <bench_cpu|bench_coreml|bench_cuda/gpu|run>")
 		return
 	}
 }

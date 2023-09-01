@@ -296,5 +296,7 @@ span.onclick = function () {
 window.onclick = function (event) {
     if (event.target == modal) {
         modal.style.display = "none";
+        videoPlayer.pause();  // Pause the video
+        videoPlayer.currentTime = 0;  // Reset video time
     }
 }

@@ -29,14 +29,14 @@ func bench(config objectPredict.Config, num int) {
 	stats := prettyTimer.NewTimingStats()
 
 	for i := 0; i < num; i++ {
-		start := time.Now()
+		stats.Start()
 		_, _, err = obj.Predict(img)
 		if err != nil {
 			fmt.Println("Cannot predict:", err)
 			return
 		}
 		// End timer
-		stats.RecordTiming(time.Since(start))
+		stats.Finish()
 	}
 	stats.PrintStats()
 }

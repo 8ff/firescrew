@@ -147,6 +147,31 @@ Usage: firescrew [configfile]
   -update, --update, update     Updates firescrew to the latest version
 ```
 
+## Benchmarks!
+#### `YOLOV8S` Running CUDA 11.8 on `RTX 4090`
+```
+Min Time: 16.369294ms, Max Time: 1.748422882s, Avg Time: 20.55754ms, Count: 500
+50th: 16.787455ms, 90th: 17.206168ms, 99th: 27.898232ms
+```
+
+#### `YOLOV8S` Running CUDA 11.8 on `RTX 3090`
+```
+Min Time: 15.337001ms, Max Time: 1.931347977s, Avg Time: 28.308399ms, Count: 500
+50th: 24.313751ms, 90th: 25.290932ms, 99th: 34.881259ms
+```
+
+#### `YOLOV8S` Running CoreML on `M1 Mac`
+```
+Min Time: 32.435875ms, Max Time: 53.711166ms, Avg Time: 35.725131ms, Count: 500
+50th: 35.232417ms, 90th: 37.851167ms, 99th: 44.405792ms
+```
+
+#### `YOLOV8S` Running CPU on Core i5-8500T @ 2.10GHz
+```
+Min Time: 103.251637ms, Max Time: 308.058517ms, Avg Time: 120.917971ms, Count: 500
+50th: 116.531572ms, 90th: 126.291139ms, 99th: 230.462122ms
+```
+
 ## Dependencies Installation for YOLOv8
 Docker image already includes everything you need to get started but if you choose to run manually and use YoloV8 model, you will need to install the Ultralytics dependencies.
 You can do this by running the following command:

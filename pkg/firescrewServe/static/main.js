@@ -286,17 +286,21 @@ promptInput.addEventListener('keydown', function (event) {
 // Every 30 seconds query the data
 // setInterval(queryData, 15000);
 
-// When the user clicks on <span> (x), close the modal
-span.onclick = function () {
+// Function to close the modal
+function closeModal() {
     modal.style.display = "none";
+    videoPlayer.pause();  // Pause the video
+    videoPlayer.currentTime = 0;  // Reset video time
 }
 
+// When the user clicks on <span> (x), close the modal
+span.onclick = function () {
+    closeModal();
+}
 
 // When the user clicks anywhere outside of the modal, close it
 window.onclick = function (event) {
     if (event.target == modal) {
-        modal.style.display = "none";
-        videoPlayer.pause();  // Pause the video
-        videoPlayer.currentTime = 0;  // Reset video time
+        closeModal();
     }
 }

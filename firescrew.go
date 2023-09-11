@@ -15,7 +15,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/color/palette"
 	"image/draw"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -1733,6 +1735,16 @@ func endMotionEvent() {
 	// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtimeConfig.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
 	Log("info", "MOTION_ENDED")
 	runtimeConfig.MotionMutex.Lock()
+
+	// Create gif from snapshots
+	fullPath, err := createGifFromSnapshots(runtimeConfig.MotionVideo.Snapshots)
+	if err != nil {
+		// Handle error
+		fmt.Println("An error occurred:", err)
+	} else {
+		fmt.Println("GIF created at:", fullPath)
+	}
+
 	// Stop Hi res recording and dump json file as well as clear struct
 	runtimeConfig.MotionVideo.MotionEnd = time.Now()
 	runtimeConfig.HiResControlChannel <- RecordMsg{Record: false}
@@ -1806,4 +1818,58 @@ func endMotionEvent() {
 
 	runtimeConfig.MotionTriggered = false
 	runtimeConfig.MotionMutex.Unlock()
+}
+
+func createGifFromSnapshots(snapshots []string) (string, error) {
+	// Check if snapshots slice is empty
+	if len(snapshots) == 0 {
+		return "", errors.New("no snapshots available for creating gif")
+	}
+
+	// Prepend the base directory path to each snapshot name
+	for i, snapshot := range snapshots {
+		snapshots[i] = filepath.Join(globalConfig.Video.HiResPath, snapshot)
+	}
+	var frames []*image.Paletted
+	var delays []int
+
+	for _, snapshot := range snapshots {
+		imgFile, err := os.Open(snapshot)
+		if err != nil {
+			return "", err
+		}
+		defer imgFile.Close()
+
+		img, err := jpeg.Decode(imgFile)
+		if err != nil {
+			return "", err
+		}
+
+		bounds := img.Bounds()
+		paletted := image.NewPaletted(bounds, palette.Plan9)
+		draw.Draw(paletted, bounds, img, bounds.Min, draw.Over)
+		frames = append(frames, paletted)
+
+		delays = append(delays, 40)
+	}
+
+	// Create GIF filename
+	outputFilename := fmt.Sprintf("gif_%s.gif", runtimeConfig.MotionVideo.ID)
+	fullPath := filepath.Join(globalConfig.Video.HiResPath, outputFilename)
+
+	outFile, err := os.Create(fullPath)
+	if err != nil {
+		return "", err
+	}
+	defer outFile.Close()
+
+	err = gif.EncodeAll(outFile, &gif.GIF{
+		Image: frames,
+		Delay: delays,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return fullPath, nil
 }

@@ -49,5 +49,10 @@
             "password": "",
             "topic": "firescrew"
         }
+    },
+    "notifications": {
+        "enablePushoverAlerts": true,
+        "pushoverAppToken": "",
+        "pushoverUserKey" :""
     }
 }

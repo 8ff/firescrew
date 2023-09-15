@@ -261,6 +261,11 @@ Firescrew uses a JSON configuration file for its settings. Here is a brief expla
             "password": "",
             "topic": "firescrew"
         }
+    },
+    "notifications": {
+        "enablePushoverAlerts": true, // If true, pushover alerts will be enabled.
+        "pushoverAppToken": "", // Place your pushover App Token here for realtime notifications
+        "pushoverUserKey" :"" // Place your pushover User Key here for realtime notifications
     }
 }
 ```

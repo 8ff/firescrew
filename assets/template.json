@@ -51,5 +51,10 @@
             "password": "",
             "topic": ""
         }
+    },
+    "notifications": {
+        "enablePushoverAlerts": true,
+        "pushoverAppToken": "",
+        "pushoverUserKey" :""
     }
 }

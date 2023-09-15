@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"mime/multipart"
 	_ "net/http/pprof"
 	"runtime"
 
@@ -15,9 +16,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/color/palette"
 	"image/draw"
-	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -112,6 +111,11 @@ type Config struct {
 		ScriptPath string `json:"scriptPath"`
 		Webhook    string `json:"webhookUrl"`
 	} `json:"events"`
+	Notifications struct {
+		EnablePushoverAlerts bool   `json:"enablePushoverAlerts"`
+		PushoverAppToken     string `json:"pushoverAppToken"`
+		PushoverUserKey      string `json:"pushoverUserKey"`
+	} `json:"notifications"`
 }
 
 type StreamParams struct {
@@ -336,6 +340,19 @@ func readConfig(path string) Config {
 	}
 
 	runtimeConfig.TextFont = font
+
+	// Check if pushover tokens are provided if enabled
+	if config.Notifications.EnablePushoverAlerts {
+		if config.Notifications.PushoverAppToken == "" {
+			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("pushoverAppToken must be set")))
+			os.Exit(1)
+		}
+
+		if config.Notifications.PushoverUserKey == "" {
+			Log("error", fmt.Sprintf("Error parsing config file: %v", errors.New("pushoverUserKey must be set")))
+			os.Exit(1)
+		}
+	}
 
 	return config
 }
@@ -1214,6 +1231,16 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 					frame = ob.RemovePadding(frame, origWidth, origHeight)
 				}
 
+				// Send pushover notification
+				if globalConfig.Notifications.EnablePushoverAlerts {
+
+					// Send pushover notification
+					err := sendPushoverNotification(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", frame)
+					if err != nil {
+						Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
+					}
+				}
+
 				saveJPEG(filepath.Join(globalConfig.Video.HiResPath, snapshotFilename), frame, 100)
 			} else {
 				Log("warning", "runtimeConfig.MotionVideo.ID is empty, not writing snapshot. This shouldnt happen.")
@@ -1736,14 +1763,14 @@ func endMotionEvent() {
 	Log("info", "MOTION_ENDED")
 	runtimeConfig.MotionMutex.Lock()
 
-	// Create gif from snapshots
-	fullPath, err := createGifFromSnapshots(runtimeConfig.MotionVideo.Snapshots)
-	if err != nil {
-		// Handle error
-		fmt.Println("An error occurred:", err)
-	} else {
-		fmt.Println("GIF created at:", fullPath)
-	}
+	// // Create gif from snapshots
+	// fullPath, err := createGifFromSnapshots(runtimeConfig.MotionVideo.Snapshots)
+	// if err != nil {
+	// 	// Handle error
+	// 	fmt.Println("An error occurred:", err)
+	// } else {
+	// 	fmt.Println("GIF created at:", fullPath)
+	// }
 
 	// Stop Hi res recording and dump json file as well as clear struct
 	runtimeConfig.MotionVideo.MotionEnd = time.Now()
@@ -1820,59 +1847,60 @@ func endMotionEvent() {
 	runtimeConfig.MotionMutex.Unlock()
 }
 
-func createGifFromSnapshots(snapshots []string) (string, error) {
-	// Check if snapshots slice is empty
-	if len(snapshots) == 0 {
-		return "", errors.New("no snapshots available for creating gif")
+func sendPushoverNotification(userKey string, appToken string, msg string, img *image.RGBA) error {
+	// Convert the image to JPEG format
+	var imgBuffer bytes.Buffer
+	if err := jpeg.Encode(&imgBuffer, img, nil); err != nil {
+		return fmt.Errorf("error encoding image: %v", err)
 	}
 
-	// Create a new array to hold the modified snapshot paths
-	newSnapshots := make([]string, len(snapshots))
-	for i, snapshot := range snapshots {
-		newSnapshots[i] = filepath.Join(globalConfig.Video.HiResPath, snapshot)
+	// Create a new HTTP request
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+
+	// Set up form fields
+	if err := w.WriteField("token", appToken); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
+	}
+	if err := w.WriteField("user", userKey); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
+	}
+	if err := w.WriteField("message", msg); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
 	}
 
-	var frames []*image.Paletted
-	var delays []int
-
-	// Use newSnapshots instead of the original snapshots array
-	for _, snapshot := range newSnapshots {
-		imgFile, err := os.Open(snapshot)
-		if err != nil {
-			return "", err
-		}
-		defer imgFile.Close()
-
-		img, err := jpeg.Decode(imgFile)
-		if err != nil {
-			return "", err
-		}
-
-		bounds := img.Bounds()
-		paletted := image.NewPaletted(bounds, palette.Plan9)
-		draw.Draw(paletted, bounds, img, bounds.Min, draw.Over)
-		frames = append(frames, paletted)
-
-		delays = append(delays, 40)
-	}
-
-	// Create GIF filename
-	outputFilename := fmt.Sprintf("gif_%s.gif", runtimeConfig.MotionVideo.ID)
-	fullPath := filepath.Join(globalConfig.Video.HiResPath, outputFilename)
-
-	outFile, err := os.Create(fullPath)
+	// Attach the in-memory image as an attachment
+	fw, err := w.CreateFormFile("attachment", "image.jpg")
 	if err != nil {
-		return "", err
+		return fmt.Errorf("CreateFormFile Error: %v", err)
 	}
-	defer outFile.Close()
+	if _, err := io.Copy(fw, &imgBuffer); err != nil {
+		return fmt.Errorf("copy File Error: %v", err)
+	}
 
-	err = gif.EncodeAll(outFile, &gif.GIF{
-		Image: frames,
-		Delay: delays,
-	})
+	// Close the writer
+	w.Close()
+
+	// Create a HTTP request to Pushover API
+	req, err := http.NewRequest("POST", "https://api.pushover.net/1/messages.json", &b)
 	if err != nil {
-		return "", err
+		return fmt.Errorf("NewRequest Error: %v", err)
 	}
 
-	return fullPath, nil
+	// Set the content type, this will include the boundary.
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	// Execute the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("error executing request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check the response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Non-OK HTTP status: %s", resp.Status)
+	}
+
+	return nil
 }

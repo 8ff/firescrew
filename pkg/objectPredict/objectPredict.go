@@ -227,7 +227,7 @@ func (c *Client) initSession() (ModelSession, error) {
 		defer cudaOptions.Destroy()
 
 		// This is a clunky API, but it reflects how the underlying C API sets CUDA options.
-		err = cudaOptions.Update(map[string]string{"device_id": string(c.CudaDeviceID)})
+		err = cudaOptions.Update(map[string]string{"device_id": fmt.Sprintf("%d", c.CudaDeviceID)})
 		if err != nil {
 			return ModelSession{}, fmt.Errorf("error updating CUDA provider options: %w", err)
 		}

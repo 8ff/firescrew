@@ -42,6 +42,7 @@ type Config struct {
 	ModelWidth   int
 	ModelHeight  int
 	EnableCuda   bool
+	CudaDeviceID int
 	EnableCoreMl bool
 }
 
@@ -54,6 +55,7 @@ type Client struct {
 	LibExtractPath string
 	RuntimeSession ModelSession
 	EnableCuda     bool
+	CudaDeviceID   int
 	EnableCoreMl   bool
 }
 
@@ -137,6 +139,9 @@ func Init(opt Config) (*Client, error) {
 	if _, err := os.Stat(client.ModelPath); err != nil {
 		return &Client{}, fmt.Errorf("modelPath does not exist: %s", client.ModelPath)
 	}
+
+	// Copy cudaDeviceID
+	client.CudaDeviceID = opt.CudaDeviceID
 
 	// Set model width/height
 	client.ModelWidth = opt.ModelWidth
@@ -222,7 +227,7 @@ func (c *Client) initSession() (ModelSession, error) {
 		defer cudaOptions.Destroy()
 
 		// This is a clunky API, but it reflects how the underlying C API sets CUDA options.
-		err = cudaOptions.Update(map[string]string{"device_id": "0"})
+		err = cudaOptions.Update(map[string]string{"device_id": string(c.CudaDeviceID)})
 		if err != nil {
 			return ModelSession{}, fmt.Errorf("error updating CUDA provider options: %w", err)
 		}

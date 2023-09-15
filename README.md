@@ -341,7 +341,6 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 
 ## Roadmap
 - GetDimensions Web UI
-- Add benchmarks
 - Add uploading footage to S3 compatible cloud host
 - HA Integration
 - Standardize the way adapter scripts return data

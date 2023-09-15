@@ -3,6 +3,7 @@ pkg/objectPredict/lib.tgz
 pkg/objectPredict/lib/
 firescrew
 config.json
+demoStream/demoConfig.json
 .aider*
 .DS_Store
 demoStream/rtspServer/rtspServer

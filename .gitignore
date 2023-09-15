@@ -5,6 +5,5 @@ firescrew
 config.json
 .aider*
 .DS_Store
-.gitignore
 demoStream/rtspServer/rtspServer
 demoStream/sample.mp4

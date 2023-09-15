@@ -1,0 +1,53 @@
+{
+    "cameraName": "demo",
+    "deviceUrl": "rtsp://127.0.0.1:8553/lo",
+    "loStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
+    "hiResDeviceUrl": "rtsp://127.0.0.1:8554/hi",
+    "hiStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
+    "printDebug": true,
+    "video": {
+        "hiResPath": "rec/hi",
+        "recodeTsToMp4": true,
+        "onlyRemuxMp4": true
+    },
+    "motion": {
+        "confidenceMinThreshold": 0.3,
+        "lookForClasses": ["car", "truck", "person", "bicycle", "motorcycle", "bus", "cat", "dog", "boat"],
+        "onnxModel": "yolov8n",
+        "onnxEnableCoreMl": true,
+        "embeddedObjectScript": "objectDetectServerYolo.py",
+        "networkObjectDetectServer": "",
+        "prebufferSeconds": 5,
+        "eventGap": 10
+    },
+    "pixelMotionAreaThreshold": 0.00,
+    "objectCenterMovementThreshold": 50.0,
+    "objectAreaThreshold": 2000.0,
+    "ignoreAreasClasses": [
+        {"class": ["template"], "coordinates": "0,0,0,0"}
+    ],
+    "streamDrawIgnoredAreas": false,
+    "enableOutputStream": false,
+    "outputStreamAddr": ":8040",
+    "events": {
+        "webhookUrl": "",
+        "scriptPath": "",
+        "slack": {
+            "url": "" },
+        "mqtt": {
+            "host": "broker.hivemq.com",
+            "port": 1883,
+            "user": "",
+            "password": "",
+            "topic": "firescrew"
+        }
+    }
+}

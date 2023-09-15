@@ -1826,14 +1826,17 @@ func createGifFromSnapshots(snapshots []string) (string, error) {
 		return "", errors.New("no snapshots available for creating gif")
 	}
 
-	// Prepend the base directory path to each snapshot name
+	// Create a new array to hold the modified snapshot paths
+	newSnapshots := make([]string, len(snapshots))
 	for i, snapshot := range snapshots {
-		snapshots[i] = filepath.Join(globalConfig.Video.HiResPath, snapshot)
+		newSnapshots[i] = filepath.Join(globalConfig.Video.HiResPath, snapshot)
 	}
+
 	var frames []*image.Paletted
 	var delays []int
 
-	for _, snapshot := range snapshots {
+	// Use newSnapshots instead of the original snapshots array
+	for _, snapshot := range newSnapshots {
 		imgFile, err := os.Open(snapshot)
 		if err != nil {
 			return "", err

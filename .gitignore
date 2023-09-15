@@ -1,9 +1,0 @@
-rec
-pkg/objectPredict/lib.tgz
-pkg/objectPredict/lib/
-firescrew
-m/
-config.json
-.aider*
-.DS_Store
-demoStream/

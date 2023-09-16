@@ -16,7 +16,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/color/palette"
 	"image/draw"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io"
@@ -47,6 +49,9 @@ import (
 )
 
 var Version string
+
+var gifSliceMutex sync.Mutex
+var gifSlice []image.RGBA
 
 //go:embed assets/*
 var assetsFs embed.FS
@@ -695,7 +700,7 @@ func recordRTSPStream(rtspURL string, controlChannel <-chan RecordMsg, prebuffer
 func recodeToMP4(inputFile string) (string, error) {
 	// Check if the input file has a .ts extension
 	if !strings.HasSuffix(inputFile, ".ts") {
-		return "", fmt.Errorf("input file must have a .ts extension")
+		return "", fmt.Errorf("input file must have a .ts extension. Got: %s", inputFile)
 	}
 
 	// Remove the .ts extension and replace it with .mp4
@@ -1171,6 +1176,26 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 				}
 				eventHandler("motion_start", eventJson)
 
+				// Send pushover notification
+				if globalConfig.Notifications.EnablePushoverAlerts {
+					frameCopy := *frame
+
+					ob.DrawRectangle(&frameCopy, rect, color.RGBA{255, 165, 0, 255}, 2) // Draw orange rectangle
+
+					pt := image.Pt(predict.Left, predict.Top-5)
+					if predict.Top-5 < 0 {
+						pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
+					}
+					ob.AddLabelWithTTF(&frameCopy, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
+
+					// Send pushover notification
+					err := sendPushoverNotification(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", &frameCopy)
+					if err != nil {
+						Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
+					}
+
+				}
+
 				// Unlock mutex
 				runtimeConfig.MotionMutex.Unlock()
 			} else {
@@ -1231,15 +1256,11 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 					frame = ob.RemovePadding(frame, origWidth, origHeight)
 				}
 
-				// Send pushover notification
-				if globalConfig.Notifications.EnablePushoverAlerts {
-
-					// Send pushover notification
-					err := sendPushoverNotification(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", frame)
-					if err != nil {
-						Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
-					}
-				}
+				// Add frames for gif
+				copyFrame := *frame
+				gifSliceMutex.Lock()
+				gifSlice = append(gifSlice, copyFrame)
+				gifSliceMutex.Unlock()
 
 				saveJPEG(filepath.Join(globalConfig.Video.HiResPath, snapshotFilename), frame, 100)
 			} else {
@@ -1761,16 +1782,27 @@ func calcInferenceStats(predict []Prediction) {
 func endMotionEvent() {
 	// Log("info", fmt.Sprintf("SINCE_LAST_EVENT: %d GAP: %d", time.Since(runtimeConfig.MotionTriggeredLast), time.Duration(globalConfig.Motion.EventGap)*time.Second))
 	Log("info", "MOTION_ENDED")
+	runtimeConfig.MotionTriggered = false
 	runtimeConfig.MotionMutex.Lock()
 
-	// // Create gif from snapshots
-	// fullPath, err := createGifFromSnapshots(runtimeConfig.MotionVideo.Snapshots)
-	// if err != nil {
-	// 	// Handle error
-	// 	fmt.Println("An error occurred:", err)
-	// } else {
-	// 	fmt.Println("GIF created at:", fullPath)
-	// }
+	if globalConfig.Notifications.EnablePushoverAlerts { // Send pushover notification
+		// // Create gif from snapshots
+		gifSliceMutex.Lock()
+		CreateGIF(gifSlice, fmt.Sprintf("%s/%s.gif", globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.ID), 100)
+		gifSlice = make([]image.RGBA, 0)
+		gifSliceMutex.Unlock()
+
+		// Send pushover notification
+		err := sendPushoverNotificationGif(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", fmt.Sprintf("%s/%s.gif", globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.ID))
+		if err != nil {
+			Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
+		}
+		// Delete gif
+		err = os.Remove(fmt.Sprintf("%s/%s.gif", globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.ID))
+		if err != nil {
+			Log("error", fmt.Sprintf("Error removing gif file: %v", err))
+		}
+	}
 
 	// Stop Hi res recording and dump json file as well as clear struct
 	runtimeConfig.MotionVideo.MotionEnd = time.Now()
@@ -1843,7 +1875,6 @@ func endMotionEvent() {
 	// 	// Clear the whole runtimeConfig.MotionVideo struct
 	runtimeConfig.MotionVideo = VideoMetadata{}
 
-	runtimeConfig.MotionTriggered = false
 	runtimeConfig.MotionMutex.Unlock()
 }
 
@@ -1894,6 +1925,87 @@ func sendPushoverNotification(userKey string, appToken string, msg string, img *
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("error executing request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check the response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Non-OK HTTP status: %s", resp.Status)
+	}
+
+	return nil
+}
+
+// CreateGIF creates a GIF file from a slice of *image.RGBA images
+func CreateGIF(images []image.RGBA, outputPath string, delay int) error {
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	anim := &gif.GIF{}
+	for _, srcImg := range images {
+		// Convert image.RGBA to *image.Paletted
+		bounds := srcImg.Bounds()
+		palettedImage := image.NewPaletted(bounds, palette.Plan9)
+		draw.Draw(palettedImage, palettedImage.Rect, &srcImg, bounds.Min, draw.Over)
+
+		anim.Image = append(anim.Image, palettedImage)
+		anim.Delay = append(anim.Delay, delay)
+	}
+
+	return gif.EncodeAll(outFile, anim)
+}
+
+func sendPushoverNotificationGif(userKey string, appToken string, msg string, gifPath string) error {
+	// Open the GIF file
+	file, err := os.Open(gifPath)
+	if err != nil {
+		return fmt.Errorf("Error opening GIF file: %v", err)
+	}
+	defer file.Close()
+
+	// Create a new HTTP request
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+
+	// Set up form fields
+	if err := w.WriteField("token", appToken); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
+	}
+	if err := w.WriteField("user", userKey); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
+	}
+	if err := w.WriteField("message", msg); err != nil {
+		return fmt.Errorf("WriteField Error: %v", err)
+	}
+
+	// Attach the GIF file as an attachment
+	fw, err := w.CreateFormFile("attachment", "image.gif")
+	if err != nil {
+		return fmt.Errorf("CreateFormFile Error: %v", err)
+	}
+	if _, err := io.Copy(fw, file); err != nil {
+		return fmt.Errorf("Copy File Error: %v", err)
+	}
+
+	// Close the writer
+	w.Close()
+
+	// Create a HTTP request to Pushover API
+	req, err := http.NewRequest("POST", "https://api.pushover.net/1/messages.json", &b)
+	if err != nil {
+		return fmt.Errorf("NewRequest Error: %v", err)
+	}
+
+	// Set the content type, this will include the boundary.
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	// Execute the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("Error executing request: %v", err)
 	}
 	defer resp.Body.Close()
 

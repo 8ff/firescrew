@@ -1189,7 +1189,7 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 					ob.AddLabelWithTTF(&frameCopy, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
 
 					// Send pushover notification
-					err := sendPushoverNotification(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", &frameCopy)
+					err := sendPushoverNotification(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion detected!", &frameCopy)
 					if err != nil {
 						Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
 					}
@@ -1793,7 +1793,7 @@ func endMotionEvent() {
 		gifSliceMutex.Unlock()
 
 		// Send pushover notification
-		err := sendPushoverNotificationGif(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion alert", fmt.Sprintf("%s/%s.gif", globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.ID))
+		err := sendPushoverNotificationGif(globalConfig.Notifications.PushoverUserKey, globalConfig.Notifications.PushoverAppToken, "Motion ended", fmt.Sprintf("%s/%s.gif", globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.ID))
 		if err != nil {
 			Log("error", fmt.Sprintf("Error sending pushover notification: %v", err))
 		}

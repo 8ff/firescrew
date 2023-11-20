@@ -895,7 +895,7 @@ func main() {
 
 	if globalConfig.Motion.OnnxModel != "" {
 		var err error
-		runtimeConfig.ObjectPredictClient, err = ob.Init(ob.Config{Model: "yolov8n", EnableCoreMl: true})
+		runtimeConfig.ObjectPredictClient, err = ob.Init(ob.Config{Model: "yolov8n", EnableCoreMl: globalConfig.Motion.OnnxEnableCoreMl})
 		if err != nil {
 			fmt.Println("Cannot init model:", err)
 			return

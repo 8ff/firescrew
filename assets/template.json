@@ -16,7 +16,7 @@
     "video": {
         "hiResPath": "rec/hi",
         "recodeTsToMp4": true,
-        "onlyRemuxMp4": true,
+        "onlyRemuxMp4": true
     },
     "motion": {
         "confidenceMinThreshold": 0.3,

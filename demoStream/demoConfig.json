@@ -51,7 +51,7 @@
         }
     },
     "notifications": {
-        "enablePushoverAlerts": true,
+        "enablePushoverAlerts": false,
         "pushoverAppToken": "",
         "pushoverUserKey" :""
     }

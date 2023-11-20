@@ -127,7 +127,7 @@ Start object detection
 
 Starting WebUI
 ```bash
-go run firescrew.go -s rec/hi :8080
+./firescrew -s rec/hi :8080
 ```
 
 

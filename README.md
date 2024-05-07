@@ -180,7 +180,7 @@ You can do this by running the following command:
 ```
 This command installs the Ultralytics package which includes the necessary dependencies for the YOLOv8 model.
 If you encounter any problems during the installation, or you're looking for more advanced setup instructions, please refer to the [Ultralytics Quick Start Guide](https://docs.ultralytics.com/quickstart/).
-Note: Make sure you have Python and pip (or pip3) installed on your system before running these commands. Ensure that your Python environment is properly set up and is compatible with the YOLOv8 model requirements.
+Note: Make sure you have Python and pip (or pip3) installed on your system before running these commands. Ensure that your Python environment is properly set up and is compatible with the YOLOv8 model requirements. 
 
 ## Dependencies Installation for EdgeTPU Coral
 If you choose to use the EdgeTPU model via the Python adapter for faster and more accurate detection, you will need to install the Ultralytics dependencies.

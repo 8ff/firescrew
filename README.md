@@ -72,7 +72,7 @@ Firescrew leverages the capabilities of `ffmpeg` to ensure optimal performance a
 ```bash
 apt-get install ffmpeg
 pip3 install ultralytics
-curl -O firescrew -L https://github.com/8ff/firescrew/releases/download/latest/firescrew.linux.amd64 && chmod +x firescrew
+curl -o firescrew -L https://github.com/8ff/firescrew/releases/download/latest/firescrew.linux.amd64 && chmod +x firescrew
 ```
 
 

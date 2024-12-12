@@ -450,6 +450,7 @@ func getStreamInfo(rtspURL string) (StreamInfo, error) {
 	cmd := exec.CommandContext(ctx, "ffprobe", "-rtsp_transport", "tcp", "-v", "quiet", "-print_format", "json", "-show_streams", rtspURL)
 	output, err := cmd.Output()
 	if err != nil {
+		Log("debug", fmt.Sprintf("ffprobe output: %s", output))
 		return StreamInfo{}, err
 	}
 

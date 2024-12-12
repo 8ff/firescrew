@@ -2,19 +2,11 @@ on:
   push:
     branches:
       - main
-
 name: Build and Release
-
 jobs:
   build_and_release:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            arch: amd64
-
-    runs-on: ${{ matrix.os }}
-    env:
+    runs-on: ubuntu-latest
+    env: # Define environment variables here
       TAG: latest
       RELEASE_NAME: Latest release
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -26,11 +18,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: '*' # Use the latest stable version of Go
+          go-version: '*' # Use the latest stable version of Go          
 
       - name: Set release date
         run: echo "RELEASE_DATE=$(date +'%Y-%m-%d_%H:%M:%S')" >> $GITHUB_ENV
-
+        
+        # Set the RELEASE_BODY using RELEASE_DATE
       - name: Set RELEASE_BODY
         run: echo "RELEASE_BODY=Latest release ${{ env.RELEASE_DATE }}" >> $GITHUB_ENV
 
@@ -41,13 +34,32 @@ jobs:
         run: curl -L https://7ff.org/lib.tgz -o pkg/objectPredict/lib.tgz
 
       - name: Download releaseMaker
-        run: wget https://github.com/8ff/releaseMaker/releases/download/latest/releaseMaker.${{ matrix.os }}.${{ matrix.arch }} -O /tmp/releaseMaker && chmod +x /tmp/releaseMaker
+        run: wget https://github.com/8ff/releaseMaker/releases/download/latest/releaseMaker.linux.amd64 -O /tmp/releaseMaker && chmod +x /tmp/releaseMaker
+      
+      - name: Build Darwin ARM64 binary
+        run: GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.darwin.arm64"
+      
+      - name: Build Darwin AMD64 binary
+        run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.darwin.amd64"
+      
+      - name: Build Linux ARM64 binary
+        run: GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.linux.arm64"
+      
+      - name: Build Linux AMD64 binary
+        run: GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.linux.amd64"
 
-      - name: Build binary
-        run: go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.${{ matrix.os }}.${{ matrix.arch }}"
+      - name: Build Windows AMD64 binary
+        run: GOOS=windows GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.windows.amd64.exe"
 
-      - name: Build RTSP Server binary
-        run: cd demoStream/rtspServer; go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.${{ matrix.os }}.${{ matrix.arch }}"
+      - name: Build Windows ARM64 binary
+        run: GOOS=windows GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.windows.arm64.exe"
+
+      - name: Build Linux ARM64 RTSP Server binary
+        run: cd demoStream/rtspServer; GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.linux.arm64"
+
+      - name: Build Linux AMD64 RTSP Server binary
+        run: cd demoStream/rtspServer; GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.linux.amd64"
+
 
       - name: Replace Existing Release
         run: /tmp/releaseMaker replace ${{ github.repository }} ${{ env.TAG }} "${{ env.RELEASE_NAME }}" "${{ env.RELEASE_BODY }}"
